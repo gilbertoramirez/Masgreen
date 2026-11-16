@@ -3,11 +3,8 @@ import { PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { dateTime, localDate, money, startOfLocalDay } from "@/lib/format";
 import { itemsForOrders, orderCode } from "@/lib/orders";
-import { getSettings } from "@/lib/settings";
 import type { Order, OrderStatus } from "@/lib/types";
 import { ORDER_STATUS_LABEL, PAYMENT_LABEL } from "@/lib/types";
-import { siteUrl } from "@/lib/url";
-import { statusMessage, waLink } from "@/lib/whatsapp";
 import { markPaid, updateOrderStatus } from "../../actions";
 import PrintButton from "@/components/admin/PrintButton";
 import CancelOrderControls from "@/components/admin/CancelOrderControls";
@@ -52,10 +49,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             ? ["1=1", []]
             : ["status NOT IN ('entregado','cancelado','pago_pendiente')", []];
   const orders = await all<Order>(`SELECT * FROM orders WHERE ${where[0]} ORDER BY created_at DESC LIMIT 200`, where[1] as string[]);
-  const [items, settings, base, drivers] = await Promise.all([
+  const [items, drivers] = await Promise.all([
     itemsForOrders(orders.map((o) => o.id)),
-    getSettings(),
-    siteUrl(),
     all<{ id: number; name: string }>("SELECT id, name FROM drivers"),
   ]);
   const driverName = new Map(drivers.map((d) => [d.id, d.name]));
@@ -85,7 +80,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
         {orders.map((o) => {
           const its = items.get(o.id) ?? [];
-          const track = `${base}/pedido/${o.token}`;
           return (
             <article key={o.id} className="card space-y-3 text-sm">
               <header className="flex items-start justify-between gap-2">
@@ -191,16 +185,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   </form>
                 )}
                 <PrintButton orderId={o.id} />
-                {o.phone && (
-                  <a
-                    className="btn-whatsapp"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    href={waLink(o.phone, statusMessage(o, settings.business_name, track))}
-                  >
-                    WhatsApp
-                  </a>
-                )}
                 <CancelOrderControls
                   orderId={o.id}
                   cancelled={o.status === "cancelado"}

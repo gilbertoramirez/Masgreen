@@ -20,9 +20,6 @@ import {
 } from "@/lib/orders";
 import { getSettings, setSetting } from "@/lib/settings";
 import { sendNtfy } from "@/lib/notify";
-import { isShortMapsLink, parseCoords, resolveShortMapsLink } from "@/lib/coords";
-import { markDelivered, markOnTheWay, planRoute, type RouteResult } from "@/lib/deliveryRoute";
-import { hashPin, validPin } from "@/lib/drivers";
 import { addMovement, CashError, closeSession, openSession } from "@/lib/cash";
 import { setCategoryPhoto, setProductPhoto } from "@/lib/images";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
@@ -512,85 +509,14 @@ export async function saveSettings(formData: FormData) {
   await requireAdmin();
   await setSetting(
     "business_name",
-    str(formData, "business_name") || "Mi cafetería",
+    str(formData, "business_name") || "Masgreen",
   );
   await setSetting(
     "whatsapp_number",
     str(formData, "whatsapp_number").replace(/[^\d+]/g, ""),
   );
-  const address = str(formData, "address");
-  const prev = await getSettings();
-  await setSetting("address", address);
-  // Nueva dirección sin ubicación fijada a mano: se vuelve a ubicar en el mapa en el siguiente envío
-  if (address !== prev.address && !prev.cafe_location_manual) {
-    await setSetting("cafe_lat", "");
-    await setSetting("cafe_lng", "");
-  }
+  await setSetting("address", str(formData, "address"));
   await setSetting("hours", str(formData, "hours"));
-  await setSetting(
-    "delivery_enabled",
-    formData.get("delivery_enabled") ? "1" : "0",
-  );
-  await setSetting("store_open", formData.get("store_open") ? "1" : "0");
-  await setSetting(
-    "min_delivery_order",
-    String(toCents(formData.get("min_delivery_order"))),
-  );
-  done();
-}
-
-/** Convierte un link de Google Maps (también los cortos maps.app.goo.gl) en coordenadas. */
-export async function coordsFromMapsLink(
-  text: string,
-): Promise<{ ok: true; lat: number; lng: number } | { ok: false; message: string }> {
-  await requireAdmin();
-  const direct = parseCoords(text);
-  if (direct) return { ok: true, ...direct };
-  if (isShortMapsLink(text)) {
-    const c = await resolveShortMapsLink(text).catch(() => null);
-    if (c) return { ok: true, ...c };
-  }
-  return {
-    ok: false,
-    message:
-      "No encontramos coordenadas en ese link. En Google Maps mantén presionado sobre tu local y copia los números que aparecen.",
-  };
-}
-
-export async function saveDeliverySettings(formData: FormData) {
-  await requireAdmin();
-  const km = (k: string) => String(Math.min(Math.max(Math.round(num(formData, k) * 10) / 10, 0), 500));
-  await setSetting("delivery_fee", String(toCents(formData.get("delivery_fee"))));
-  await setSetting("delivery_base_km", km("base_km"));
-  await setSetting("delivery_per_km", String(toCents(formData.get("per_km"))));
-  await setSetting("delivery_max_km", km("max_km"));
-  await setSetting("free_delivery_from", String(toCents(formData.get("free_delivery_from"))));
-  // Ubicación de la cafetería: "lat, lng" o link de Google Maps (vacío = usar la dirección del negocio)
-  const raw = str(formData, "cafe_coords");
-  const c = parseCoords(raw) ?? (isShortMapsLink(raw) ? await resolveShortMapsLink(raw).catch(() => null) : null);
-  if (c) {
-    await setSetting("cafe_lat", String(c.lat));
-    await setSetting("cafe_lng", String(c.lng));
-    await setSetting("cafe_location_manual", "1");
-  } else if (!raw) {
-    await setSetting("cafe_lat", "");
-    await setSetting("cafe_lng", "");
-    await setSetting("cafe_location_manual", "0");
-  }
-  done();
-}
-
-
-// ---------- Comisión por pago en línea ----------
-
-export async function saveOnlineFee(formData: FormData) {
-  await requireAdmin();
-  const clamp = (n: number, max: number) =>
-    String(Math.min(Math.max(Number.isFinite(n) ? n : 0, 0), max));
-  await setSetting("online_fee_enabled", formData.get("enabled") ? "1" : "0");
-  await setSetting("online_fee_percent", clamp(num(formData, "percent"), 20));
-  await setSetting("online_fee_fixed", String(toCents(formData.get("fixed"))));
-  await setSetting("online_fee_iva", clamp(num(formData, "iva"), 30));
   done();
 }
 
@@ -662,106 +588,6 @@ export async function testNtfy(): Promise<{ ok: boolean; text: string }> {
         ok: true,
         text: `✓ Enviado al tema ${where}. Si no te llegó, revisa que la app ntfy esté suscrita a ese mismo tema.`,
       };
-}
-
-// ---------- Reparto (la lógica vive en lib/deliveryRoute.ts) ----------
-
-export async function planDeliveryRoute(orderIds: number[], returnToCafe: boolean): Promise<RouteResult> {
-  await requireAdmin();
-  return planRoute(orderIds, returnToCafe);
-}
-
-/** Marca "En camino" varios pedidos a la vez (salida del repartidor). */
-export async function markOrdersOnTheWay(orderIds: number[]) {
-  await requireAdmin();
-  await markOnTheWay(orderIds, null);
-  done();
-}
-
-export async function deliverOrder(orderId: number) {
-  await requireAdmin();
-  await markDelivered(orderId, null);
-  done();
-}
-
-// ---------- Repartidores ----------
-
-function driversBack(msg: string, ok = true): never {
-  redirect(`/admin/repartidores?${ok ? "ok" : "error"}=${encodeURIComponent(msg)}`);
-}
-
-export async function createDriver(formData: FormData) {
-  await requireAdmin();
-  const name = str(formData, "name").slice(0, 60);
-  const phone = normalizePhone(str(formData, "phone"));
-  const pin = str(formData, "pin");
-  if (!name) driversBack("Escribe el nombre del repartidor.", false);
-  if (!phone) driversBack("Escribe un teléfono de 10 dígitos.", false);
-  if (!validPin(pin)) driversBack("El PIN debe tener exactamente 6 números.", false);
-  const exists = await get<{ id: number }>("SELECT id FROM drivers WHERE phone = ?", [phone]);
-  if (exists) driversBack("Ya hay un repartidor con ese teléfono.", false);
-  await run("INSERT INTO drivers (name, phone, pin_hash) VALUES (?, ?, ?)", [name, phone, hashPin(pin)]);
-  driversBack(`${name} ya puede entrar en /repartidor con su teléfono y PIN.`);
-}
-
-export async function updateDriver(formData: FormData) {
-  await requireAdmin();
-  const id = int(formData, "id");
-  const name = str(formData, "name").slice(0, 60);
-  const phone = normalizePhone(str(formData, "phone"));
-  if (!id || !name || !phone) driversBack("Revisa el nombre y el teléfono.", false);
-  const other = await get<{ id: number }>("SELECT id FROM drivers WHERE phone = ? AND id <> ?", [phone, id]);
-  if (other) driversBack("Ya hay otro repartidor con ese teléfono.", false);
-  await run("UPDATE drivers SET name = ?, phone = ? WHERE id = ?", [name, phone, id]);
-  driversBack("Datos guardados.");
-}
-
-/** Nuevo PIN: también cierra la sesión que tenga abierta y quita el bloqueo por intentos. */
-export async function resetDriverPin(formData: FormData) {
-  await requireAdmin();
-  const id = int(formData, "id");
-  const pin = str(formData, "pin");
-  if (!validPin(pin)) driversBack("El PIN debe tener exactamente 6 números.", false);
-  await run(
-    "UPDATE drivers SET pin_hash = ?, session_version = session_version + 1, failed_attempts = 0, locked_until = NULL WHERE id = ?",
-    [hashPin(pin), id],
-  );
-  driversBack("PIN cambiado. Su sesión anterior se cerró.");
-}
-
-/** Activar/desactivar: al desactivar se cierra su sesión al instante. */
-export async function toggleDriver(id: number) {
-  await requireAdmin();
-  const d = await get<{ active: number; name: string }>("SELECT active, name FROM drivers WHERE id = ?", [id]);
-  if (!d) driversBack("No existe ese repartidor.", false);
-  await run("UPDATE drivers SET active = ?, session_version = session_version + 1 WHERE id = ?", [d.active ? 0 : 1, id]);
-  driversBack(d.active ? `${d.name} ya no puede entrar.` : `${d.name} puede volver a entrar.`);
-}
-
-export async function deleteDriver(id: number) {
-  await requireAdmin();
-  await run("DELETE FROM drivers WHERE id = ?", [id]);
-  driversBack("Repartidor eliminado.");
-}
-
-export async function saveScheduleSettings(formData: FormData) {
-  await requireAdmin();
-  const time = (k: string) => {
-    const v = str(formData, k);
-    return /^\d{2}:\d{2}$/.test(v) ? v : "";
-  };
-  // Turnos de cada día (0 = domingo); un turno sin las dos horas o al revés se ignora
-  const week = Array.from({ length: 7 }, (_, d) => {
-    if (!formData.get(`d${d}_on`)) return [];
-    return [1, 2]
-      .map((n) => ({ open: time(`d${d}_o${n}`), close: time(`d${d}_c${n}`) }))
-      .filter((sh) => sh.open && sh.close && sh.close > sh.open);
-  });
-  await setSetting("sched_enabled", formData.get("enabled") ? "1" : "0");
-  await setSetting("sched_week", JSON.stringify(week));
-  await setSetting("sched_prep", String(Math.min(Math.max(Math.round(num(formData, "prep")), 0), 240)));
-  await setSetting("sched_ahead", String(Math.min(Math.max(int(formData, "ahead"), 0), 6)));
-  done();
 }
 
 // ---------- Corte de caja ----------

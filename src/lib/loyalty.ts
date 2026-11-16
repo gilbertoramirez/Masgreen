@@ -165,7 +165,7 @@ export async function sendRedeemCode(phoneInput: string): Promise<{ devCode?: st
     console.log(`[lealtad] código para ${phone}: ${code}`);
     return { devCode: code };
   }
-  await sendMessage(phone, `Café Allison: tu código para canjear tu bebida gratis es ${code}. Vence en 10 minutos.`);
+  await sendMessage(phone, `Masgreen: tu código para canjear tu bebida gratis es ${code}. Vence en 10 minutos.`);
   return {};
 }
 

@@ -10,8 +10,6 @@ const LINKS = [
   { href: "/admin/pedidos", label: "Pedidos", short: "Pedidos", icon: "🛵" },
   { href: "/admin/productos", label: "Menú", short: "Menú", icon: "☕" },
   { href: "/admin/caja", label: "Corte de caja", short: "Corte", icon: "💰" },
-  { href: "/admin/reparto", label: "Reparto", short: "Reparto", icon: "🗺️" },
-  { href: "/admin/repartidores", label: "Repartidores", short: "Repartidores", icon: "🧑‍✈️" },
   { href: "/admin/inventario", label: "Inventario", short: "Inventario", icon: "📦" },
   { href: "/admin/gastos", label: "Gastos", short: "Gastos", icon: "💸" },
   { href: "/admin/finanzas", label: "Finanzas", short: "Finanzas", icon: "📈" },
@@ -52,9 +50,6 @@ export default function AdminNav({ activeOrders = 0 }: { activeOrders?: number }
           )}
         </Link>
       ))}
-      <Link href="/" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-cafe-300 hover:bg-cafe-800">
-        <span>🌐</span>Ver tienda
-      </Link>
     </nav>
   );
 }
@@ -89,9 +84,6 @@ export function MobileTabBar({ activeOrders = 0, logout }: { activeOrders?: numb
                   {l.short}
                 </Link>
               ))}
-              <Link href="/" onClick={() => setMore(false)} className="flex flex-col items-center gap-1 rounded-xl bg-cafe-50 p-3 text-sm">
-                <span className="text-2xl">🌐</span>Tienda
-              </Link>
               <form action={logout} className="contents">
                 <button className="flex flex-col items-center gap-1 rounded-xl bg-cafe-50 p-3 text-sm text-red-700">
                   <span className="text-2xl">🚪</span>Salir

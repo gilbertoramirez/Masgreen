@@ -68,7 +68,7 @@ export async function getSettings(): Promise<Settings> {
         : null,
     cafe_location_manual: m.cafe_location_manual === "1",
     schedule: {
-      enabled: m.sched_enabled !== "0",
+      enabled: m.sched_enabled === "1", // Masgreen no usa pedidos programados
       week: parseWeek(m.sched_week),
       prepMinutes: Math.min(Math.max(Number(m.sched_prep ?? 20), 0), 240),
       daysAhead: Math.min(Math.max(Number(m.sched_ahead ?? 1), 0), 6),

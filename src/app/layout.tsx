@@ -6,11 +6,12 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Café Allison",
-  description: "Pide tu café y pan favorito con entrega a domicilio.",
+  title: "Masgreen",
+  description: "Punto de venta, inventario y finanzas de Masgreen.",
+  robots: { index: false },
 };
 
-export const viewport: Viewport = { themeColor: "#3b2416", viewportFit: "cover" };
+export const viewport: Viewport = { themeColor: "#1f3a17", viewportFit: "cover" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

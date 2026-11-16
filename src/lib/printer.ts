@@ -261,7 +261,7 @@ export async function printOrders(ids: number[], s: PrinterSettings = loadPrinte
 }
 
 export const SAMPLE_TICKET: TicketData = {
-  business: { name: "Café Allison", address: "", phone: "" },
+  business: { name: "Masgreen", address: "", phone: "" },
   order: {
     id: 0,
     channel: "mostrador",

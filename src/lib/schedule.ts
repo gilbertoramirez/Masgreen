@@ -17,7 +17,7 @@ export type ScheduleRules = {
 
 export type SlotDay = { ymd: string; label: string; slots: { iso: string; label: string }[] };
 
-/** Horario de Café Allison: L–V 8–12 y 17–22, sábado 17–22, domingo cerrado. */
+/** Horario de fábrica: L–V 8–12 y 17–22, sábado 17–22, domingo cerrado. */
 export const DEFAULT_WEEK: Shift[][] = [
   [],
   ...Array.from({ length: 5 }, () => [
