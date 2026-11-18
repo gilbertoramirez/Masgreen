@@ -151,7 +151,7 @@ export default function InventoryScanner({ targets }: { targets: Target[] }) {
             <div className="flex flex-wrap gap-2">
               <select className="input min-w-0 flex-1" value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
                 <option value="">Selecciona…</option>
-                {["Productos del menú", "Insumos"].map((g) => (
+                {["Productos del menú", "Insumos"].filter((g) => targets.some((t) => t.group === g)).map((g) => (
                   <optgroup key={g} label={g}>
                     {targets
                       .filter((t) => t.group === g)
