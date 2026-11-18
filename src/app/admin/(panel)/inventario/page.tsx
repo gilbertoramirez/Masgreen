@@ -2,7 +2,7 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
 import { productLabel, type Product, type Supply } from "@/lib/types";
-import { adjustStock, deleteSupply, enableStock, restock, saveInventoryProduct, saveSupply } from "../../actions";
+import { adjustStock, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
 import InventoryScanner from "@/components/admin/InventoryScanner";
 import BarcodeField from "@/components/admin/BarcodeField";
 import Link from "next/link";
@@ -38,8 +38,8 @@ const REASON: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, supplies, movements, targets, untracked] = await Promise.all([
-    all<Product>("SELECT * FROM products WHERE track_stock = 1 AND active = 1 ORDER BY name"),
+  const [products, supplies, movements, targets] = await Promise.all([
+    all<Product>("SELECT * FROM products WHERE active = 1 ORDER BY track_stock DESC, name, size"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
     all<Movement>(
       `SELECT m.*, CASE m.item_type WHEN 'product' THEN p.name || CASE WHEN p.size <> '' THEN ' (' || p.size || ')' ELSE '' END ELSE s.name END AS name
@@ -50,10 +50,10 @@ export default async function InventoryPage() {
        ORDER BY m.created_at DESC LIMIT 30`,
     ),
     barcodeTargets(),
-    all<Product>("SELECT * FROM products WHERE track_stock = 0 AND active = 1 ORDER BY name, size"),
   ]);
+  const tracked = products.filter((p) => p.track_stock);
   const inventoryValue =
-    products.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
+    tracked.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
     supplies.reduce((a, s) => a + Math.max(s.qty, 0) * s.cost_per_unit, 0);
 
   const itemOptions = (
@@ -144,16 +144,18 @@ export default async function InventoryPage() {
 
       <section className="card space-y-3">
         <div>
-          <h2 className="font-semibold">Productos con control de existencias</h2>
-          <p className="text-sm text-cafe-600">Cambia lo que necesites y toca Guardar en ese renglón.</p>
+          <h2 className="font-semibold">Productos del menú</h2>
+          <p className="text-sm text-cafe-600">
+            Cambia lo que necesites y toca Guardar en ese renglón. Marca “Contar existencias” en los que quieras llevar piezas.
+          </p>
         </div>
         {products.length === 0 ? (
-          <p className="text-sm text-cafe-600">Todavía ninguno. Actívalo abajo en los productos que quieras contar.</p>
+          <p className="text-sm text-cafe-600">Todavía no hay productos. Agrégalos en Menú.</p>
         ) : (
           <div className="divide-y divide-cafe-100">
             {products.map((p) => (
               <form
-                key={`${p.id}-${p.stock}-${p.cost}-${p.barcode}`}
+                key={`${p.id}-${p.stock}-${p.cost}-${p.barcode}-${p.track_stock}`}
                 action={saveInventoryProduct}
                 className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_repeat(4,7rem)_10rem_auto]"
               >
@@ -163,7 +165,11 @@ export default async function InventoryPage() {
                   <Link href={`/admin/productos?id=${p.id}`} className="text-xs text-cafe-600 underline">
                     Editar nombre, categoría o foto ›
                   </Link>
-                  {p.stock <= p.min_stock && <p className="text-xs font-semibold text-red-700">⚠️ Por resurtir</p>}
+                  {p.track_stock && p.stock <= p.min_stock ? <p className="text-xs font-semibold text-red-700">⚠️ Por resurtir</p> : null}
+                  <input type="hidden" name="track_stock_field" value="1" />
+                  <label className="mt-1 flex items-center gap-1.5 text-xs">
+                    <input type="checkbox" name="track_stock" defaultChecked={Boolean(p.track_stock)} /> Contar existencias
+                  </label>
                 </div>
                 <Cell label="Precio venta ($)">
                   <input name="price" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(p.price)} required />
@@ -176,7 +182,7 @@ export default async function InventoryPage() {
                     name="stock"
                     type="number"
                     step="1"
-                    className={`input ${p.stock <= p.min_stock ? "border-red-300 text-red-700" : ""}`}
+                    className={`input ${p.track_stock && p.stock <= p.min_stock ? "border-red-300 text-red-700" : ""}`}
                     defaultValue={p.stock}
                   />
                 </Cell>
@@ -192,25 +198,6 @@ export default async function InventoryPage() {
           </div>
         )}
       </section>
-
-      {untracked.length > 0 && (
-        <section className="card space-y-2">
-          <div>
-            <h2 className="font-semibold">Productos sin control de existencias</h2>
-            <p className="text-sm text-cafe-600">No se cuentan piezas. Toca “Contar existencias” para poder editarlos aquí.</p>
-          </div>
-          <div className="divide-y divide-cafe-100">
-            {untracked.map((p) => (
-              <form key={p.id} action={enableStock.bind(null, p.id)} className="flex items-center justify-between gap-2 py-2 text-sm">
-                <span>
-                  {productLabel(p)} {p.barcode && <span className="font-mono text-xs text-cafe-500">· {p.barcode}</span>}
-                </span>
-                <button className="btn-secondary shrink-0">Contar existencias</button>
-              </form>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="card space-y-3">
         <div>

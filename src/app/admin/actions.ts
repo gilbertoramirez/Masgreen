@@ -433,16 +433,10 @@ export async function saveInventoryProduct(formData: FormData) {
   const minStock = Math.max(0, Math.round(num(formData, "min_stock")));
   await transaction(async (q) => {
     await q("UPDATE products SET price = ?, cost = ?, min_stock = ? WHERE id = ?", [Math.max(price, 0), Math.max(cost, 0), minStock, id]);
+    if (formData.has("track_stock_field")) await q("UPDATE products SET track_stock = ? WHERE id = ?", [formData.get("track_stock") ? 1 : 0, id]);
     if (formData.has("stock")) await setQtyWithMovement(q, "product", id, num(formData, "stock"));
   });
   if (formData.has("barcode")) await setBarcodeField("product", id, str(formData, "barcode"));
-  done();
-}
-
-/** Activa el control de existencias de un producto (aparece en Inventario con 0 piezas). */
-export async function enableStock(id: number) {
-  await requireAdmin();
-  await run("UPDATE products SET track_stock = 1 WHERE id = ?", [id]);
   done();
 }
 
