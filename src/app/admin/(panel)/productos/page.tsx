@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import Link from "next/link";
 import { Field, PageTitle } from "@/components/admin/ui";
 import { all, get } from "@/lib/db";
@@ -10,16 +10,18 @@ import BarcodeField from "@/components/admin/BarcodeField";
 import { blobEnabled } from "@/lib/images";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
-  await requireAdmin();
+  const admin = (await requireStaff()).role === "admin";
   const sp = await searchParams;
-  const products = await all<Product>("SELECT * FROM products ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name");
+  const allProducts = await all<Product>("SELECT * FROM products ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name");
+  // Los vendedores solo ven lo que está a la venta
+  const products = admin ? allProducts : allProducts.filter((p) => p.active);
   const editing = sp.id ? await get<Product>("SELECT * FROM products WHERE id = ?", [Number(sp.id)]) : undefined;
-  const showForm = Boolean(editing || sp.nuevo);
+  const showForm = admin && Boolean(editing || sp.nuevo);
   const categories = [...new Set(products.map((p) => p.category))];
 
   return (
     <div className="space-y-5">
-      <PageTitle actions={<Link href="?nuevo=1" className="btn-primary">+ Agregar producto</Link>}>Menú</PageTitle>
+      <PageTitle actions={admin ? <Link href="?nuevo=1" className="btn-primary">+ Agregar producto</Link> : undefined}>Menú</PageTitle>
 
 
       {showForm && (
@@ -109,10 +111,14 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               <th>Producto</th>
               <th className="hidden sm:table-cell">Categoría</th>
               <th className="text-right">Precio</th>
-              <th className="hidden text-right sm:table-cell">Costo</th>
-              <th className="text-right">Margen</th>
-              <th className="hidden text-right sm:table-cell">Existencia</th>
-              <th></th>
+              {admin && (
+                <>
+                  <th className="hidden text-right sm:table-cell">Costo</th>
+                  <th className="text-right">Margen</th>
+                  <th className="hidden text-right sm:table-cell">Existencia</th>
+                  <th></th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -135,6 +141,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                   </td>
                   <td className="hidden sm:table-cell">{p.category}</td>
                   <td className="text-right tabular-nums">{money(p.price)}</td>
+                  {admin && (
+                    <>
                   <td className="hidden text-right tabular-nums sm:table-cell">{money(p.cost)}</td>
                   <td className={`text-right tabular-nums ${margin < 40 ? "text-amber-700" : ""}`}>{margin}%</td>
                   <td className={`hidden text-right tabular-nums sm:table-cell ${p.track_stock && p.stock <= p.min_stock ? "font-semibold text-red-700" : ""}`}>
@@ -148,6 +156,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                       <button className="text-cafe-600 underline">{p.active ? "Ocultar" : "Mostrar"}</button>
                     </form>
                   </td>
+                    </>
+                  )}
                 </tr>
               );
             })}

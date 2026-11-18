@@ -6,7 +6,7 @@ import { get, run } from "./db";
 /**
  * Sesiones del panel.
  * - Contraseña de administrador (ADMIN_PASSWORD): acceso total (uid 0).
- * - Usuarios con PIN (tabla staff): rol "admin" (acceso total) o "vendedor" (caja, pedidos, corte e inventario).
+ * - Usuarios con PIN (tabla staff): rol "admin" (acceso total) o "vendedor" (caja, pedidos, menú sin costos y corte a ciegas).
  */
 const COOKIE = "cafe_admin";
 const MAX_AGE = 60 * 60 * 24 * 14; // 14 días
@@ -26,7 +26,7 @@ export type StaffUser = {
 };
 
 /** Páginas que puede abrir un vendedor (lo demás es solo para administradores). */
-export const SELLER_PATHS = ["/admin/pos", "/admin/pedidos", "/admin/caja", "/admin/inventario"];
+export const SELLER_PATHS = ["/admin/pos", "/admin/pedidos", "/admin/productos", "/admin/caja"];
 
 function adminPassword(): string | null {
   const p = process.env.ADMIN_PASSWORD?.trim();

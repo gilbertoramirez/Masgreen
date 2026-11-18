@@ -193,14 +193,16 @@ export default function PosTerminal({ products, canManage = true }: { products: 
     const code = raw.replace(/\s+/g, "");
     if (!code) return false;
     const p = products.find((x) => x.barcode && x.barcode === code);
+    if (!p && !canManage) {
+      setScanNote({ ok: false, text: `El código ${code} no está en el menú. Avísale al administrador.` });
+      return false;
+    }
     if (!p) {
       setConvert(null);
       setScanNote({ ok: false, text: `Buscando ${code}…` });
       lookupBarcode(code)
         .then((m) => {
-          if (m?.type === "supply" && !canManage) {
-            setScanNote({ ok: false, text: `${m.name} es un insumo, no un producto de venta. Pide al administrador que lo pase al menú.` });
-          } else if (m?.type === "supply") {
+          if (m?.type === "supply") {
             setScanNote(null);
             setConvPrice("");
             setConvCat(products[0]?.category ?? "");

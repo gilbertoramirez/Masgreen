@@ -1,3 +1,4 @@
+import { requireStaff } from "@/lib/auth";
 import { slotLabel } from "@/lib/schedule";
 import { PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
@@ -36,6 +37,7 @@ function nextSteps(o: Order): OrderStatus[] {
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
+  const admin = (await requireStaff()).role === "admin";
   const f = ((await searchParams).f ?? "activos") as keyof typeof FILTERS;
   const today = startOfLocalDay(localDate());
   const where =
@@ -185,11 +187,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   </form>
                 )}
                 <PrintButton orderId={o.id} />
-                <CancelOrderControls
-                  orderId={o.id}
-                  cancelled={o.status === "cancelado"}
-                  paidOnline={o.payment_method === "stripe" && o.payment_status === "pagado"}
-                />
+                {admin && (
+                  <CancelOrderControls
+                    orderId={o.id}
+                    cancelled={o.status === "cancelado"}
+                    paidOnline={o.payment_method === "stripe" && o.payment_status === "pagado"}
+                  />
+                )}
               </div>
             </article>
           );

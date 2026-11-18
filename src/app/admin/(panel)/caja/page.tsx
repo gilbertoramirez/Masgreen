@@ -1,3 +1,4 @@
+import { requireStaff } from "@/lib/auth";
 import Link from "next/link";
 import { Field, PageTitle } from "@/components/admin/ui";
 import PrintPageButton from "@/components/admin/PrintPageButton";
@@ -70,6 +71,7 @@ function SummaryCard({ s, summary, title }: { s: CashSession; summary: CashSumma
 }
 
 export default async function CashPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const admin = (await requireStaff()).role === "admin";
   const sp = await searchParams;
   const ok = typeof sp.ok === "string" ? sp.ok : null;
   const error = typeof sp.error === "string" ? sp.error : null;
@@ -82,6 +84,19 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
   );
 
   // Detalle de un corte ya cerrado
+  // Vendedores: el detalle del corte (diferencia, ventas) solo lo ve el administrador
+  if (viewId && !admin) {
+    return (
+      <div className="max-w-xl space-y-4">
+        <PageTitle>Corte de caja</PageTitle>
+        {messages}
+        <p className="card text-sm">✓ Corte registrado. El administrador revisará el conteo.</p>
+        <Link href="/admin/pos" className="btn-primary">
+          Ir a la caja
+        </Link>
+      </div>
+    );
+  }
   if (viewId) {
     const s = await sessionById(viewId);
     if (s?.closed_at) {
@@ -133,7 +148,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
             <input name="note" className="input" placeholder="Turno mañana, quién abre…" />
           </Field>
           <button className="btn-primary w-full py-3">Abrir caja</button>
-          {last && (
+          {admin && last && (
             <p className="text-xs text-cafe-600">
               Último corte: {dateTime(last.closed_at!)} · contado {money(last.counted_cash ?? 0)}
             </p>
@@ -145,8 +160,9 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
             🟢 Caja abierta desde {dateTime(s.opened_at)} con fondo de {money(s.opening_cash)}
             {s.open_note ? ` · ${s.open_note}` : ""}
           </p>
-          <SummaryCard s={s} summary={summary} title="Turno en curso" />
+          {admin && <SummaryCard s={s} summary={summary} title="Turno en curso" />}
 
+          {admin && (
           <form action={cashMovement} className="card space-y-3 text-sm">
             <h2 className="font-semibold">↕️ Entrada o salida de efectivo</h2>
             <p className="text-cafe-600">Ej. pagaste al proveedor con dinero del cajón, retiraste efectivo o metiste cambio.</p>
@@ -173,11 +189,18 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
               </div>
             )}
           </form>
+          )}
 
           <form action={closeCash} className="card space-y-3 text-sm">
             <h2 className="font-semibold">🔒 Cerrar caja</h2>
             <p className="text-cafe-600">
-              Cuenta todo el efectivo del cajón. Debe haber <b>{money(summary.expected)}</b>.
+              {admin ? (
+                <>
+                  Cuenta todo el efectivo del cajón. Debe haber <b>{money(summary.expected)}</b>.
+                </>
+              ) : (
+                "Cuenta todo el efectivo del cajón (billetes y monedas) y escribe el total."
+              )}
             </p>
             <Field label="Efectivo contado ($)">
               <input name="counted" type="number" step="0.5" min="0" className="input text-lg" required />
@@ -190,7 +213,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
         </>
       )}
 
-      {history.some((h) => h.closed_at) && (
+      {admin && history.some((h) => h.closed_at) && (
         <section className="card text-sm">
           <h2 className="mb-2 font-semibold">Cortes anteriores</h2>
           <ul className="divide-y divide-cafe-100">

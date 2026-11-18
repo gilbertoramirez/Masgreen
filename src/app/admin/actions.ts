@@ -154,7 +154,7 @@ export async function cancelOrder(
   orderId: number,
   reason: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireStaff();
+  await requireAdmin();
   if (!reason.trim())
     return { ok: false, error: "Escribe el motivo de la cancelación." };
   try {
@@ -295,7 +295,7 @@ async function addExpense(e: {
 
 /** Entrada de mercancía. Opcionalmente registra el gasto y actualiza el costo unitario. */
 export async function restock(formData: FormData) {
-  const session = await requireStaff();
+  const session = await requireAdmin();
   const { type, id } = parseItem(formData);
   const qty = num(formData, "qty");
   const totalCost = toCents(formData.get("total_cost"));
@@ -352,7 +352,7 @@ export async function restock(formData: FormData) {
 
 /** Ajuste manual (merma, conteo físico, consumo de insumos). */
 export async function adjustStock(formData: FormData) {
-  await requireStaff();
+  await requireAdmin();
   const { type, id } = parseItem(formData);
   const newQty = num(formData, "new_qty");
   if (!id || newQty < 0) return;
@@ -632,9 +632,10 @@ function cashBack(params: Record<string, string>): never {
 }
 
 export async function openCash(formData: FormData) {
-  await requireStaff();
+  const session = await requireStaff();
   try {
-    await openSession(toCents(formData.get("opening")), str(formData, "note"));
+    const note = str(formData, "note");
+    await openSession(toCents(formData.get("opening")), `Abrió ${session.name}${note ? `: ${note}` : ""}`);
   } catch (e) {
     if (e instanceof CashError) cashBack({ error: e.message });
     throw e;
@@ -643,7 +644,7 @@ export async function openCash(formData: FormData) {
 }
 
 export async function cashMovement(formData: FormData) {
-  await requireStaff();
+  await requireAdmin();
   const kind = str(formData, "kind") === "entrada" ? "entrada" : "salida";
   try {
     await addMovement(kind, toCents(formData.get("amount")), str(formData, "reason"));
@@ -655,11 +656,12 @@ export async function cashMovement(formData: FormData) {
 }
 
 export async function closeCash(formData: FormData) {
-  await requireStaff();
+  const session = await requireStaff();
   if (str(formData, "counted") === "") cashBack({ error: "Escribe cuánto efectivo contaste en el cajón." });
   let id: number;
   try {
-    id = await closeSession(toCents(formData.get("counted")), str(formData, "note"));
+    const note = str(formData, "note");
+    id = await closeSession(toCents(formData.get("counted")), `Cerró ${session.name}${note ? `: ${note}` : ""}`);
   } catch (e) {
     if (e instanceof CashError) cashBack({ error: e.message });
     throw e;
@@ -683,7 +685,7 @@ export async function removeCategoryPhoto(category: string) {
 // ---------- Códigos de barras (inventario) ----------
 
 export async function lookupBarcode(code: string): Promise<BarcodeMatch | null> {
-  await requireStaff();
+  await requireAdmin();
   return findByBarcode(String(code));
 }
 

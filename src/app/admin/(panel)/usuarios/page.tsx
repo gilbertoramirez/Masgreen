@@ -26,8 +26,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     <div className="space-y-5">
       <PageTitle>Usuarios</PageTitle>
       <p className="-mt-3 text-sm text-cafe-600">
-        Cada persona entra con su nombre y un PIN de 4 a 6 números. Los <b>vendedores</b> solo ven Caja, Pedidos, Corte de caja e
-        Inventario (sin editar precios ni costos). Los <b>administradores</b> ven todo.
+        Cada persona entra con su nombre y un PIN de 4 a 6 números. Los <b>vendedores</b> solo cobran en Caja, atienden Pedidos (sin
+        cancelarlos), ven el Menú sin costos ni margen y hacen el corte de caja sin ver cuánto debería haber. Los{" "}
+        <b>administradores</b> ven todo.
       </p>
       {sp.error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{ERRORS[sp.error] ?? "No se pudo guardar."}</p>}
       {sp.ok && <p className="rounded-lg bg-green-50 p-2 text-sm text-green-800">✓ Guardado.</p>}
