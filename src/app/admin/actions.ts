@@ -712,3 +712,32 @@ export async function createSupplyFromBarcode(input: {
   done();
   return findByBarcode(code);
 }
+
+/**
+ * Pasa un insumo con código de barras a producto de venta (para cobrarlo en caja).
+ * El producto conserva el código, las piezas y el costo; el insumo se quita para no contarlo doble.
+ */
+export async function supplyToProduct(input: { supplyId: number; price: number; category: string }): Promise<{ ok: true; productId: number } | { ok: false; error: string }> {
+  await requireAdmin();
+  const price = Math.round((Number(input.price) || 0) * 100);
+  const category = String(input.category ?? "").trim().slice(0, 40) || "General";
+  if (price <= 0) return { ok: false, error: "Pon el precio de venta." };
+  const s = await get<{ id: number; name: string; qty: number; min_qty: number; cost_per_unit: number; barcode: string }>(
+    "SELECT id, name, qty, min_qty, cost_per_unit, barcode FROM supplies WHERE id = ?",
+    [Math.round(Number(input.supplyId)) || 0],
+  );
+  if (!s) return { ok: false, error: "Ya no existe ese insumo." };
+  let productId = 0;
+  await transaction(async (q) => {
+    if (s.barcode) await q("UPDATE products SET barcode = '' WHERE barcode = ?", [s.barcode]);
+    const [row] = await q<{ id: number }>(
+      `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, pos_only, stock, barcode)
+       VALUES (?, '', '', '', '', ?, ?, ?, 1, ?, '', 1, 0, 0, ?, ?) RETURNING id`,
+      [s.name, category, price, s.cost_per_unit, Math.max(0, Math.round(s.min_qty)), Math.max(0, Math.round(s.qty)), s.barcode],
+    );
+    productId = row.id;
+    await q("DELETE FROM supplies WHERE id = ?", [s.id]);
+  });
+  done();
+  return { ok: true, productId };
+}

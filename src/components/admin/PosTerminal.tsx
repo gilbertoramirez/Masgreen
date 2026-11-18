@@ -7,7 +7,8 @@ import { fuzzyFilter } from "@/lib/fuzzy";
 import SaleClosedDialog, { type SaleResult } from "./SaleClosedDialog";
 import BarcodeScanner from "./BarcodeScanner";
 import LoyaltyCard from "@/components/LoyaltyCard";
-import { getLoyalty } from "@/app/admin/actions";
+import { getLoyalty, lookupBarcode, supplyToProduct } from "@/app/admin/actions";
+import { useRouter } from "next/navigation";
 import { normalizePhone, pickFreeLine, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loadPrinter, openDrawer, printTickets, shouldOpenDrawer } from "@/lib/printer";
 
@@ -115,6 +116,12 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const [search, setSearch] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<{ ok: boolean; text: string } | null>(null);
+  // Código que pertenece a un insumo: se ofrece pasarlo a producto de venta
+  const [convert, setConvert] = useState<{ id: number; name: string; qty: number; code: string } | null>(null);
+  const [convPrice, setConvPrice] = useState("");
+  const [convCat, setConvCat] = useState("");
+  const [converting, setConverting] = useState(false);
+  const router = useRouter();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [closed, setClosed] = useState<SaleResult | null>(null); // venta recién cerrada
   // Lealtad: sellos del teléfono del pedido activo y canje de bebida gratis
@@ -187,8 +194,23 @@ export default function PosTerminal({ products }: { products: P[] }) {
     if (!code) return false;
     const p = products.find((x) => x.barcode && x.barcode === code);
     if (!p) {
-      setScanNote({ ok: false, text: `El código ${code} no está registrado. Asígnalo en Inventario o en Menú.` });
-      return false;
+      setConvert(null);
+      setScanNote({ ok: false, text: `Buscando ${code}…` });
+      lookupBarcode(code)
+        .then((m) => {
+          if (m?.type === "supply") {
+            setScanNote(null);
+            setConvPrice("");
+            setConvCat(products[0]?.category ?? "");
+            setConvert({ id: m.id, name: m.name, qty: m.qty, code });
+          } else if (m?.type === "product") {
+            setScanNote({ ok: false, text: `${m.name} está oculto o no se vende en caja. Revísalo en Menú.` });
+          } else {
+            setScanNote({ ok: false, text: `El código ${code} no está registrado. Asígnalo en Inventario o en Menú.` });
+          }
+        })
+        .catch(() => setScanNote({ ok: false, text: `El código ${code} no está registrado.` }));
+      return true;
     }
     if ((ticket[p.id] ?? 0) >= p.maxQty) {
       setScanNote({ ok: false, text: `${p.name}: ya no hay existencias.` });
@@ -197,6 +219,19 @@ export default function PosTerminal({ products }: { products: P[] }) {
     add(p, 1);
     setScanNote({ ok: true, text: `✓ ${p.name} agregado (${(ticket[p.id] ?? 0) + 1})` });
     return true;
+  }
+
+  async function doConvert() {
+    if (!convert) return;
+    setConverting(true);
+    const res = await supplyToProduct({ supplyId: convert.id, price: Number(convPrice), category: convCat });
+    setConverting(false);
+    if (!res.ok) return setScanNote({ ok: false, text: res.error });
+    const name = convert.name;
+    setConvert(null);
+    if (convert.qty >= 1) setTicket((t) => ({ ...t, [res.productId]: 1 }));
+    setScanNote({ ok: true, text: `✓ ${name} ya es producto de venta${convert.qty >= 1 ? " y se agregó al ticket" : ". Pon cuántas piezas hay en Inventario"}.` });
+    router.refresh();
   }
 
   function charge() {
@@ -424,6 +459,46 @@ export default function PosTerminal({ products }: { products: P[] }) {
         </div>
         {scanNote && (
           <p className={`mb-2 rounded-lg p-2 text-sm ${scanNote.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{scanNote.text}</p>
+        )}
+        {convert && (
+          <div className="mb-2 space-y-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+            <p>
+              <b>{convert.name}</b> está registrado como <b>insumo</b>, por eso no aparece en caja. ¿Lo pasamos a producto de venta? Se
+              conservan su código y sus {convert.qty} piezas.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                className="input w-28"
+                type="number"
+                step="0.01"
+                min="0"
+                inputMode="decimal"
+                placeholder="Precio $"
+                value={convPrice}
+                onChange={(e) => setConvPrice(e.target.value)}
+              />
+              <input
+                className="input min-w-0 flex-1"
+                placeholder="Categoría (ej. Bebidas)"
+                list="pos-cats"
+                value={convCat}
+                onChange={(e) => setConvCat(e.target.value)}
+              />
+              <datalist id="pos-cats">
+                {categories.slice(1).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-primary" disabled={converting || !(Number(convPrice) > 0)} onClick={doConvert}>
+                {converting ? "Guardando…" : "Pasar a producto de venta"}
+              </button>
+              <button className="btn-secondary" onClick={() => setConvert(null)}>
+                No
+              </button>
+            </div>
+          </div>
         )}
         {scanning && (
           <BarcodeScanner
