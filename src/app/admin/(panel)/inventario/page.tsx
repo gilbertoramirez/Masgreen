@@ -5,6 +5,7 @@ import { productLabel, type Product, type Supply } from "@/lib/types";
 import { adjustStock, createInventoryProduct, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
 import InventoryScanner from "@/components/admin/InventoryScanner";
 import BarcodeField from "@/components/admin/BarcodeField";
+import ItemPicker, { type PickItem } from "@/components/admin/ItemPicker";
 import Link from "next/link";
 import { barcodeTargets } from "@/lib/barcode";
 
@@ -57,29 +58,10 @@ export default async function InventoryPage() {
     tracked.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
     supplies.reduce((a, s) => a + Math.max(s.qty, 0) * s.cost_per_unit, 0);
 
-  const itemOptions = (
-    <>
-      <option value="">Selecciona…</option>
-      {products.length > 0 && (
-        <optgroup label="Productos del menú">
-          {products.map((p) => (
-            <option key={`p${p.id}`} value={`product:${p.id}`}>
-              {productLabel(p)} (hay {p.stock})
-            </option>
-          ))}
-        </optgroup>
-      )}
-      {supplies.length > 0 && (
-        <optgroup label="Insumos">
-          {supplies.map((s) => (
-            <option key={`s${s.id}`} value={`supply:${s.id}`}>
-              {s.name} (hay {s.qty} {s.unit})
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </>
-  );
+  const pickItems: PickItem[] = [
+    ...products.map((p) => ({ item: `product:${p.id}`, label: productLabel(p), barcode: p.barcode, qty: p.stock, unit: "pza", group: "Productos" })),
+    ...supplies.map((s) => ({ item: `supply:${s.id}`, label: s.name, barcode: s.barcode, qty: s.qty, unit: s.unit, group: "Insumos" })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -94,9 +76,7 @@ export default async function InventoryPage() {
         <form action={restock} className="card space-y-3">
           <h2 className="font-semibold">📥 Registrar resurtido (compra)</h2>
           <Field label="Producto o insumo">
-            <select name="item" className="input" required>
-              {itemOptions}
-            </select>
+            <ItemPicker items={pickItems} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Cantidad que entra">
@@ -129,9 +109,7 @@ export default async function InventoryPage() {
             Úsalo cuando cuentes físicamente, haya merma o registres consumo de insumos (ej. leche usada en la semana).
           </p>
           <Field label="Producto o insumo">
-            <select name="item" className="input" required>
-              {itemOptions}
-            </select>
+            <ItemPicker items={pickItems} />
           </Field>
           <Field label="Cantidad real que hay ahora">
             <input name="new_qty" type="number" step="any" min="0" className="input" required />
