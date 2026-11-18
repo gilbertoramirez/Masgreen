@@ -5,12 +5,13 @@ import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
 import { fuzzyFilter } from "@/lib/fuzzy";
 import SaleClosedDialog, { type SaleResult } from "./SaleClosedDialog";
+import BarcodeScanner from "./BarcodeScanner";
 import LoyaltyCard from "@/components/LoyaltyCard";
 import { getLoyalty } from "@/app/admin/actions";
 import { normalizePhone, pickFreeLine, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loadPrinter, openDrawer, printTickets, shouldOpenDrawer } from "@/lib/printer";
 
-type P = { id: number; name: string; category: string; size: string; price: number; maxQty: number; icon: string };
+type P = { id: number; name: string; category: string; size: string; price: number; maxQty: number; icon: string; barcode: string };
 type Method = "efectivo" | "tarjeta" | "transferencia";
 
 /** Pedido abierto en una pestaña de la caja (se guarda en este dispositivo). */
@@ -112,6 +113,8 @@ export default function PosTerminal({ products }: { products: P[] }) {
 
   const [category, setCategory] = useState("Todo");
   const [search, setSearch] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [closed, setClosed] = useState<SaleResult | null>(null); // venta recién cerrada
   // Lealtad: sellos del teléfono del pedido activo y canje de bebida gratis
@@ -148,7 +151,10 @@ export default function PosTerminal({ products }: { products: P[] }) {
 
   const categories = useMemo(() => ["Todo", ...new Set(products.map((p) => p.category))], [products]);
   // Al buscar se busca en todo el menú (tolera acentos y errores de dedo)
-  const shown = search.trim()
+  const byCode = search.trim() ? products.filter((p) => p.barcode && p.barcode === search.trim()) : [];
+  const shown = byCode.length
+    ? byCode
+    : search.trim()
     ? fuzzyFilter(products, search, (p) => [
         { text: p.name, weight: 1 },
         { text: p.category, weight: 0.6 },
@@ -173,6 +179,24 @@ export default function PosTerminal({ products }: { products: P[] }) {
       else delete n[p.id];
       return n;
     });
+  }
+
+  /** Código leído con la cámara o con un lector USB/Bluetooth: agrega el producto al ticket. */
+  function addByBarcode(raw: string): boolean {
+    const code = raw.replace(/\s+/g, "");
+    if (!code) return false;
+    const p = products.find((x) => x.barcode && x.barcode === code);
+    if (!p) {
+      setScanNote({ ok: false, text: `El código ${code} no está registrado. Asígnalo en Inventario o en Menú.` });
+      return false;
+    }
+    if ((ticket[p.id] ?? 0) >= p.maxQty) {
+      setScanNote({ ok: false, text: `${p.name}: ya no hay existencias.` });
+      return true;
+    }
+    add(p, 1);
+    setScanNote({ ok: true, text: `✓ ${p.name} agregado (${(ticket[p.id] ?? 0) + 1})` });
+    return true;
   }
 
   function charge() {
@@ -382,13 +406,34 @@ export default function PosTerminal({ products }: { products: P[] }) {
             + Nuevo pedido
           </button>
         </div>
-        <input
-          className="input mb-2 lg:max-w-72"
-          type="search"
-          placeholder="Buscar producto…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="mb-2 flex gap-2 lg:max-w-96">
+          <input
+            className="input min-w-0 flex-1"
+            type="search"
+            placeholder="Buscar producto o código…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              // Los lectores de código USB/Bluetooth escriben el número y presionan Enter
+              if (e.key === "Enter" && /^\d{6,}$/.test(search.trim()) && addByBarcode(search)) setSearch("");
+            }}
+          />
+          <button type="button" className="btn-secondary shrink-0 px-3" onClick={() => setScanning(true)} aria-label="Escanear código de barras">
+            📷 Escanear
+          </button>
+        </div>
+        {scanNote && (
+          <p className={`mb-2 rounded-lg p-2 text-sm ${scanNote.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{scanNote.text}</p>
+        )}
+        {scanning && (
+          <BarcodeScanner
+            onDetected={(c) => {
+              setScanning(false);
+              addByBarcode(c);
+            }}
+            onClose={() => setScanning(false)}
+          />
+        )}
         <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
           {categories.map((c) => (
             <button

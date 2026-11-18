@@ -2,8 +2,10 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
 import { productLabel, type Product, type Supply } from "@/lib/types";
-import { adjustStock, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
+import { adjustStock, deleteSupply, enableStock, restock, saveInventoryProduct, saveSupply } from "../../actions";
 import InventoryScanner from "@/components/admin/InventoryScanner";
+import BarcodeField from "@/components/admin/BarcodeField";
+import Link from "next/link";
 import { barcodeTargets } from "@/lib/barcode";
 
 const UNITS = ["pza", "kg", "g", "litro", "ml", "paquete", "caja", "bolsa", "botella", "lata", "galón", "docena"];
@@ -36,7 +38,7 @@ const REASON: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, supplies, movements, targets] = await Promise.all([
+  const [products, supplies, movements, targets, untracked] = await Promise.all([
     all<Product>("SELECT * FROM products WHERE track_stock = 1 AND active = 1 ORDER BY name"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
     all<Movement>(
@@ -48,6 +50,7 @@ export default async function InventoryPage() {
        ORDER BY m.created_at DESC LIMIT 30`,
     ),
     barcodeTargets(),
+    all<Product>("SELECT * FROM products WHERE track_stock = 0 AND active = 1 ORDER BY name, size"),
   ]);
   const inventoryValue =
     products.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
@@ -145,18 +148,21 @@ export default async function InventoryPage() {
           <p className="text-sm text-cafe-600">Cambia lo que necesites y toca Guardar en ese renglón.</p>
         </div>
         {products.length === 0 ? (
-          <p className="text-sm text-cafe-600">Activa “Controlar existencias” en un producto del menú.</p>
+          <p className="text-sm text-cafe-600">Todavía ninguno. Actívalo abajo en los productos que quieras contar.</p>
         ) : (
           <div className="divide-y divide-cafe-100">
             {products.map((p) => (
               <form
                 key={`${p.id}-${p.stock}-${p.cost}-${p.barcode}`}
                 action={saveInventoryProduct}
-                className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_repeat(4,7rem)_8rem_auto]"
+                className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_repeat(4,7rem)_10rem_auto]"
               >
                 <input type="hidden" name="id" value={p.id} />
                 <div className="col-span-2 self-center sm:col-span-1">
                   <p className="font-medium">{productLabel(p)}</p>
+                  <Link href={`/admin/productos?id=${p.id}`} className="text-xs text-cafe-600 underline">
+                    Editar nombre, categoría o foto ›
+                  </Link>
                   {p.stock <= p.min_stock && <p className="text-xs font-semibold text-red-700">⚠️ Por resurtir</p>}
                 </div>
                 <Cell label="Precio venta ($)">
@@ -170,7 +176,6 @@ export default async function InventoryPage() {
                     name="stock"
                     type="number"
                     step="1"
-                    min="0"
                     className={`input ${p.stock <= p.min_stock ? "border-red-300 text-red-700" : ""}`}
                     defaultValue={p.stock}
                   />
@@ -179,7 +184,7 @@ export default async function InventoryPage() {
                   <input name="min_stock" type="number" step="1" min="0" className="input" defaultValue={p.min_stock} />
                 </Cell>
                 <Cell label="Código de barras" className="col-span-2 sm:col-span-1">
-                  <input name="barcode" defaultValue={p.barcode} className="input font-mono text-xs" inputMode="numeric" placeholder="—" />
+                  <BarcodeField defaultValue={p.barcode} />
                 </Cell>
                 <button className="btn-secondary col-span-2 sm:col-span-1">Guardar</button>
               </form>
@@ -187,6 +192,25 @@ export default async function InventoryPage() {
           </div>
         )}
       </section>
+
+      {untracked.length > 0 && (
+        <section className="card space-y-2">
+          <div>
+            <h2 className="font-semibold">Productos sin control de existencias</h2>
+            <p className="text-sm text-cafe-600">No se cuentan piezas. Toca “Contar existencias” para poder editarlos aquí.</p>
+          </div>
+          <div className="divide-y divide-cafe-100">
+            {untracked.map((p) => (
+              <form key={p.id} action={enableStock.bind(null, p.id)} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <span>
+                  {productLabel(p)} {p.barcode && <span className="font-mono text-xs text-cafe-500">· {p.barcode}</span>}
+                </span>
+                <button className="btn-secondary shrink-0">Contar existencias</button>
+              </form>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="card space-y-3">
         <div>
@@ -203,7 +227,7 @@ export default async function InventoryPage() {
             <form
               key={`${s.id}-${s.qty}-${s.cost_per_unit}-${s.barcode}`}
               action={saveSupply}
-              className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_6.5rem_6rem_6rem_7rem_8rem_auto]"
+              className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_6.5rem_6rem_6rem_7rem_10rem_auto]"
             >
               <input type="hidden" name="id" value={s.id} />
               <Cell label="Nombre" className="col-span-2 sm:col-span-1">
@@ -217,7 +241,6 @@ export default async function InventoryPage() {
                   name="qty"
                   type="number"
                   step="any"
-                  min="0"
                   defaultValue={s.qty}
                   className={`input ${s.qty <= s.min_qty ? "border-red-300 text-red-700" : ""}`}
                 />
@@ -229,7 +252,7 @@ export default async function InventoryPage() {
                 <input name="cost_per_unit" type="number" step="0.01" min="0" defaultValue={centsToInput(s.cost_per_unit)} className="input" />
               </Cell>
               <Cell label="Código de barras" className="col-span-2 sm:col-span-1">
-                <input name="barcode" defaultValue={s.barcode} className="input font-mono text-xs" inputMode="numeric" placeholder="—" />
+                <BarcodeField defaultValue={s.barcode} />
               </Cell>
               <div className="flex items-center gap-3">
                 <button className="btn-secondary">Guardar</button>

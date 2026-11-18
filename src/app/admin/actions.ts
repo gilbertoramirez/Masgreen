@@ -179,7 +179,7 @@ export async function markPaid(orderId: number) {
 
 export async function saveProduct(formData: FormData) {
   await requireAdmin();
-  const id = int(formData, "id");
+  let id = int(formData, "id");
   const name = str(formData, "name");
   if (!name) return;
   const days = formData
@@ -220,11 +220,21 @@ export async function saveProduct(formData: FormData) {
       ? null
       : await get<{ image_url: string }>("SELECT image_url FROM products WHERE name = ? AND image_url <> '' LIMIT 1", [name]);
     if (sibling) values[10] = sibling.image_url;
-    await run(
+    const row = await get<{ id: number }>(
       `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, pos_only, stock)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
       [...values, int(formData, "stock")],
     );
+    if (row) id = row.id;
+  }
+  // El código de barras no obliga a controlar existencias (sirve también para cobrar en caja)
+  if (id && formData.has("barcode")) {
+    const code = normalizeBarcode(str(formData, "barcode"));
+    if (code) {
+      await run("UPDATE products SET barcode = '' WHERE barcode = ? AND id <> ?", [code, id]);
+      await run("UPDATE supplies SET barcode = '' WHERE barcode = ?", [code]);
+    }
+    await run("UPDATE products SET barcode = ? WHERE id = ?", [code, id]);
   }
   done();
   redirect("/admin/productos");
@@ -426,6 +436,13 @@ export async function saveInventoryProduct(formData: FormData) {
     if (formData.has("stock")) await setQtyWithMovement(q, "product", id, num(formData, "stock"));
   });
   if (formData.has("barcode")) await setBarcodeField("product", id, str(formData, "barcode"));
+  done();
+}
+
+/** Activa el control de existencias de un producto (aparece en Inventario con 0 piezas). */
+export async function enableStock(id: number) {
+  await requireAdmin();
+  await run("UPDATE products SET track_stock = 1 WHERE id = ?", [id]);
   done();
 }
 

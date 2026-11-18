@@ -5,6 +5,7 @@ import { centsToInput, money } from "@/lib/format";
 import { daysLabel, parseDays, productLabel, WEEKDAYS, type Product } from "@/lib/types";
 import { saveProduct, toggleProduct } from "../../actions";
 import ProductPhotoInput from "@/components/admin/ProductPhotoInput";
+import BarcodeField from "@/components/admin/BarcodeField";
 import { blobEnabled } from "@/lib/images";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
@@ -69,6 +70,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               <input name="stock" type="number" min="0" className="input" defaultValue={0} />
             </Field>
           )}
+          <Field label="Código de barras (opcional)">
+            <BarcodeField defaultValue={editing?.barcode ?? ""} />
+          </Field>
           <Field label="Avisar cuando queden">
             <input name="min_stock" type="number" min="0" className="input" defaultValue={editing?.min_stock ?? 5} />
           </Field>
