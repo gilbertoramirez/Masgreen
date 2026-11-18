@@ -2,7 +2,7 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
 import { productLabel, type Product, type Supply } from "@/lib/types";
-import { adjustStock, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
+import { adjustStock, createInventoryProduct, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
 import InventoryScanner from "@/components/admin/InventoryScanner";
 import BarcodeField from "@/components/admin/BarcodeField";
 import Link from "next/link";
@@ -52,6 +52,7 @@ export default async function InventoryPage() {
     barcodeTargets(),
   ]);
   const tracked = products.filter((p) => p.track_stock);
+  const categories = [...new Set(products.map((p) => p.category))];
   const inventoryValue =
     tracked.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
     supplies.reduce((a, s) => a + Math.max(s.qty, 0) * s.cost_per_unit, 0);
@@ -87,7 +88,7 @@ export default async function InventoryPage() {
         Valor estimado del inventario: <strong>{money(inventoryValue)}</strong>
       </p>
 
-      <InventoryScanner targets={targets} />
+      <InventoryScanner targets={targets} categories={categories} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <form action={restock} className="card space-y-3">
@@ -150,7 +151,7 @@ export default async function InventoryPage() {
           </p>
         </div>
         {products.length === 0 ? (
-          <p className="text-sm text-cafe-600">Todavía no hay productos. Agrégalos en Menú.</p>
+          <p className="text-sm text-cafe-600">Todavía no hay productos. Agrega el primero aquí abajo.</p>
         ) : (
           <div className="divide-y divide-cafe-100">
             {products.map((p) => (
@@ -197,6 +198,39 @@ export default async function InventoryPage() {
             ))}
           </div>
         )}
+        <form action={createInventoryProduct} className="grid grid-cols-2 items-end gap-2 border-t border-cafe-100 pt-3 sm:grid-cols-4">
+          <p className="col-span-2 font-medium sm:col-span-4">➕ Nuevo producto del menú</p>
+          <Cell label="Nombre" className="col-span-2">
+            <input name="name" className="input" placeholder="Agua 1 L" required />
+          </Cell>
+          <Cell label="Categoría">
+            <input name="category" className="input" list="inv-cats" placeholder="Bebidas" required />
+          </Cell>
+          <Cell label="Precio venta ($)">
+            <input name="price" type="number" step="0.01" min="0.01" className="input" required />
+          </Cell>
+          <Cell label="Costo unitario ($)">
+            <input name="cost" type="number" step="0.01" min="0" className="input" />
+          </Cell>
+          <Cell label="Existencia">
+            <input name="stock" type="number" step="1" min="0" className="input" defaultValue={0} />
+          </Cell>
+          <Cell label="Mínimo">
+            <input name="min_stock" type="number" step="1" min="0" className="input" defaultValue={0} />
+          </Cell>
+          <Cell label="Código de barras">
+            <BarcodeField />
+          </Cell>
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" name="track_stock" defaultChecked /> Contar existencias
+          </label>
+          <button className="btn-primary col-span-2">Agregar producto</button>
+          <datalist id="inv-cats">
+            {categories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </form>
       </section>
 
       <section className="card space-y-3">

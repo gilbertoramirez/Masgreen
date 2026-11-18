@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createSupplyFromBarcode, linkBarcode, lookupBarcode, restock } from "@/app/admin/actions";
+import { createProductFromBarcode, createSupplyFromBarcode, linkBarcode, lookupBarcode, restock } from "@/app/admin/actions";
 import type { BarcodeMatch } from "@/lib/barcode";
 import { money } from "@/lib/format";
 import BarcodeScanner from "./BarcodeScanner";
@@ -10,7 +10,7 @@ import BarcodeScanner from "./BarcodeScanner";
 type Target = { item: string; label: string; group: string };
 
 /** Inventario con la cámara: escanea un código y resurte, o asígnalo a un producto/insumo. */
-export default function InventoryScanner({ targets }: { targets: Target[] }) {
+export default function InventoryScanner({ targets, categories = [] }: { targets: Target[]; categories?: string[] }) {
   const router = useRouter();
   const [scanning, setScanning] = useState(false);
   const [code, setCode] = useState("");
@@ -20,6 +20,8 @@ export default function InventoryScanner({ targets }: { targets: Target[] }) {
   const [pending, start] = useTransition();
   const [assignTo, setAssignTo] = useState("");
   const [newSupply, setNewSupply] = useState({ name: "", unit: "pza", qty: "", cost: "", min: "" });
+  const emptyProd = { name: "", category: categories[0] ?? "", price: "", cost: "", stock: "" };
+  const [newProd, setNewProd] = useState(emptyProd);
 
   function reset() {
     setCode("");
@@ -27,6 +29,24 @@ export default function InventoryScanner({ targets }: { targets: Target[] }) {
     setNotFound(false);
     setAssignTo("");
     setNewSupply({ name: "", unit: "pza", qty: "", cost: "", min: "" });
+    setNewProd(emptyProd);
+  }
+
+  function createProduct() {
+    if (!newProd.name.trim() || !(Number(newProd.price) > 0)) return;
+    start(async () => {
+      const m = await createProductFromBarcode({
+        code,
+        name: newProd.name,
+        category: newProd.category,
+        price: Number(newProd.price),
+        cost: Number(newProd.cost) || 0,
+        stock: Number(newProd.stock) || 0,
+      });
+      setMsg(m ? { ok: true, text: `✓ Producto “${m.name}” agregado al menú con su código.` } : { ok: false, text: "No se pudo crear el producto." });
+      reset();
+      router.refresh();
+    });
   }
 
   function onCode(c: string) {
@@ -167,6 +187,35 @@ export default function InventoryScanner({ targets }: { targets: Target[] }) {
                 Asignar
               </button>
             </div>
+          </div>
+          <div className="space-y-2 border-t border-amber-200 pt-3">
+            <p className="font-medium">Crear un producto de venta (menú) con este código:</p>
+            <input
+              className="input"
+              placeholder="Nombre (ej. Agua 1 L)"
+              value={newProd.name}
+              onChange={(e) => setNewProd({ ...newProd, name: e.target.value })}
+            />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <input
+                className="input"
+                list="scan-cats"
+                placeholder="Categoría"
+                value={newProd.category}
+                onChange={(e) => setNewProd({ ...newProd, category: e.target.value })}
+              />
+              <input className="input" type="number" step="0.01" min="0" placeholder="Precio $" value={newProd.price} onChange={(e) => setNewProd({ ...newProd, price: e.target.value })} />
+              <input className="input" type="number" step="0.01" min="0" placeholder="Costo $" value={newProd.cost} onChange={(e) => setNewProd({ ...newProd, cost: e.target.value })} />
+              <input className="input" type="number" step="1" min="0" placeholder="Piezas" value={newProd.stock} onChange={(e) => setNewProd({ ...newProd, stock: e.target.value })} />
+            </div>
+            <datalist id="scan-cats">
+              {categories.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+            <button className="btn-primary" onClick={createProduct} disabled={!newProd.name.trim() || !(Number(newProd.price) > 0) || pending}>
+              Crear producto
+            </button>
           </div>
           <div className="space-y-2 border-t border-amber-200 pt-3">
             <p className="font-medium">O crear un insumo nuevo con este código:</p>

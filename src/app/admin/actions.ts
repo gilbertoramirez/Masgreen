@@ -735,3 +735,90 @@ export async function supplyToProduct(input: { supplyId: number; price: number; 
   done();
   return { ok: true, productId };
 }
+
+/** Crea un producto del menú desde Inventario (con existencia y código de barras). */
+async function insertQuickProduct(input: {
+  name: string;
+  category: string;
+  price: number; // centavos
+  cost: number; // centavos
+  track: boolean;
+  stock: number;
+  minStock: number;
+  code: string;
+}): Promise<number> {
+  const code = normalizeBarcode(input.code);
+  let id = 0;
+  await transaction(async (q) => {
+    if (code) {
+      await q("UPDATE products SET barcode = '' WHERE barcode = ?", [code]);
+      await q("UPDATE supplies SET barcode = '' WHERE barcode = ?", [code]);
+    }
+    const [row] = await q<{ id: number }>(
+      `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, pos_only, stock, barcode)
+       VALUES (?, '', '', '', '', ?, ?, ?, ?, ?, '', 1, 0, 0, ?, ?) RETURNING id`,
+      [
+        input.name.slice(0, 80),
+        input.category.slice(0, 40) || "General",
+        Math.max(0, input.price),
+        Math.max(0, input.cost),
+        input.track ? 1 : 0,
+        Math.max(0, Math.round(input.minStock)),
+        Math.max(0, Math.round(input.stock)),
+        code,
+      ],
+    );
+    id = row.id;
+    if (input.track && input.stock > 0)
+      await q("INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES ('product', ?, ?, 'ajuste', 'Alta desde inventario')", [
+        id,
+        Math.round(input.stock),
+      ]);
+  });
+  return id;
+}
+
+export async function createInventoryProduct(formData: FormData) {
+  await requireAdmin();
+  const name = str(formData, "name");
+  const price = toCents(formData.get("price"));
+  if (!name || price <= 0) return;
+  await insertQuickProduct({
+    name,
+    category: str(formData, "category"),
+    price,
+    cost: toCents(formData.get("cost")),
+    track: Boolean(formData.get("track_stock")),
+    stock: num(formData, "stock"),
+    minStock: num(formData, "min_stock"),
+    code: str(formData, "barcode"),
+  });
+  done();
+}
+
+/** Desde el escáner de Inventario: código nuevo → producto de venta. */
+export async function createProductFromBarcode(input: {
+  code: string;
+  name: string;
+  category: string;
+  price: number;
+  cost: number;
+  stock: number;
+}): Promise<BarcodeMatch | null> {
+  await requireAdmin();
+  const name = String(input.name ?? "").trim();
+  const price = Math.round((Number(input.price) || 0) * 100);
+  if (!name || price <= 0 || !normalizeBarcode(String(input.code))) return null;
+  await insertQuickProduct({
+    name,
+    category: String(input.category ?? "").trim(),
+    price,
+    cost: Math.round((Number(input.cost) || 0) * 100),
+    track: true,
+    stock: Number(input.stock) || 0,
+    minStock: 0,
+    code: String(input.code),
+  });
+  done();
+  return findByBarcode(String(input.code));
+}
