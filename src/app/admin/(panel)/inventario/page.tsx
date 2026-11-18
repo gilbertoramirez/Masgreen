@@ -39,8 +39,13 @@ const REASON: Record<string, string> = {
   cancelacion: "Cancelación",
 };
 
-export default async function InventoryPage() {
+const VIEWS = { todos: "Todos", resurtir: "⚠️ Por resurtir", sin: "Sin contar" } as const;
+type View = keyof typeof VIEWS;
+
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ ver?: string }> }) {
   await requireAdmin();
+  const verParam = (await searchParams).ver;
+  const view: View = verParam === "resurtir" || verParam === "sin" ? verParam : "todos";
   const [products, supplies, movements, targets] = await Promise.all([
     all<Product>("SELECT * FROM products WHERE active = 1 ORDER BY track_stock DESC, name, size"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
@@ -55,6 +60,16 @@ export default async function InventoryPage() {
     barcodeTargets(),
   ]);
   const tracked = products.filter((p) => p.track_stock);
+  const lowProduct = (p: Product) => Boolean(p.track_stock) && p.stock <= p.min_stock;
+  const lowSupply = (s: Supply) => s.qty <= s.min_qty;
+  const lowCount = products.filter(lowProduct).length + supplies.filter(lowSupply).length;
+  const shownProducts = products.filter((p) => (view === "resurtir" ? lowProduct(p) : view === "sin" ? !p.track_stock : true));
+  const shownSupplies = view === "resurtir" ? supplies.filter(lowSupply) : view === "sin" ? [] : supplies;
+  const counts: Record<View, number> = {
+    todos: products.length + supplies.length,
+    resurtir: lowCount,
+    sin: products.filter((p) => !p.track_stock).length,
+  };
   const categories = [...new Set(products.map((p) => p.category))];
   const inventoryValue =
     tracked.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
@@ -71,6 +86,12 @@ export default async function InventoryPage() {
       <p className="-mt-3 text-sm text-cafe-600">
         Valor estimado del inventario: <strong>{money(inventoryValue)}</strong>
       </p>
+
+      {lowCount > 0 && (
+        <Link href="?ver=resurtir#lista" className="-mt-2 block rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-800">
+          ⚠️ {lowCount} {lowCount === 1 ? "artículo necesita" : "artículos necesitan"} resurtirse · Ver ›
+        </Link>
+      )}
 
       <InventoryScanner targets={targets} categories={categories} />
 
@@ -123,6 +144,23 @@ export default async function InventoryPage() {
         </form>
       </div>
 
+      <nav id="lista" className="flex scroll-mt-20 flex-wrap gap-2">
+        {(Object.keys(VIEWS) as View[]).map((v) => (
+          <Link
+            key={v}
+            href={v === "todos" ? "?#lista" : `?ver=${v}#lista`}
+            scroll={false}
+            className={`rounded-full px-3 py-1.5 text-sm ${view === v ? "bg-cafe-800 text-white" : "bg-white ring-1 ring-cafe-200"}`}
+          >
+            {VIEWS[v]} ({counts[v]})
+          </Link>
+        ))}
+      </nav>
+      {view !== "todos" && shownProducts.length === 0 && shownSupplies.length === 0 && (
+        <p className="card text-sm text-green-800">{view === "resurtir" ? "✓ Todo está arriba del mínimo. Nada por resurtir." : "Todos los productos cuentan existencias."}</p>
+      )}
+
+      {(view === "todos" || shownProducts.length > 0) && (
       <section className="card space-y-3">
         <div>
           <h2 className="font-semibold">Productos del menú</h2>
@@ -134,7 +172,7 @@ export default async function InventoryPage() {
           <p className="text-sm text-cafe-600">Todavía no hay productos. Agrega el primero aquí abajo.</p>
         ) : (
           <div className="divide-y divide-cafe-100">
-            {products.map((p) => (
+            {shownProducts.map((p) => (
               <form
                 key={`${p.id}-${p.stock}-${p.cost}-${p.barcode}-${p.track_stock}`}
                 action={saveInventoryProduct}
@@ -212,7 +250,9 @@ export default async function InventoryPage() {
           </datalist>
         </form>
       </section>
+      )}
 
+      {(view === "todos" || shownSupplies.length > 0) && (
       <section className="card space-y-3">
         <div>
           <h2 className="font-semibold">Insumos (café en grano, leche, vasos…)</h2>
@@ -224,7 +264,7 @@ export default async function InventoryPage() {
           ))}
         </datalist>
         <div className="divide-y divide-cafe-100">
-          {supplies.map((s) => (
+          {shownSupplies.map((s) => (
             <form
               key={`${s.id}-${s.qty}-${s.cost_per_unit}-${s.barcode}`}
               action={saveSupply}
@@ -283,6 +323,7 @@ export default async function InventoryPage() {
           <button className="btn-primary">Agregar</button>
         </form>
       </section>
+      )}
 
 
       <section className="card overflow-x-auto">
