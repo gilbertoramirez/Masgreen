@@ -1,4 +1,4 @@
-import { isAdmin } from "@/lib/auth";
+import { isStaff } from "@/lib/auth";
 import { get } from "@/lib/db";
 import { liveResponse } from "@/lib/live";
 
@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 /** Cambios en cualquier pedido, para el panel de administración. */
 export async function GET(req: Request) {
-  if (!(await isAdmin())) return new Response("No autorizado", { status: 401 });
+  if (!(await isStaff())) return new Response("No autorizado", { status: 401 });
   return liveResponse(req, async () => {
     const row = await get<{ v: string; online: number; pending: number; last_online: number }>(
       `SELECT COALESCE(MAX(change_seq), 0) || '-' || COUNT(*) AS v,

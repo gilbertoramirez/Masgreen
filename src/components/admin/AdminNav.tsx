@@ -4,17 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-const LINKS = [
-  { href: "/admin", label: "Resumen", short: "Resumen", icon: "📊" },
-  { href: "/admin/pos", label: "Punto de venta", short: "Caja", icon: "🧾" },
-  { href: "/admin/pedidos", label: "Pedidos", short: "Pedidos", icon: "🛵" },
-  { href: "/admin/productos", label: "Menú", short: "Menú", icon: "☕" },
-  { href: "/admin/caja", label: "Corte de caja", short: "Corte", icon: "💰" },
-  { href: "/admin/inventario", label: "Inventario", short: "Inventario", icon: "📦" },
-  { href: "/admin/gastos", label: "Gastos", short: "Gastos", icon: "💸" },
-  { href: "/admin/finanzas", label: "Finanzas", short: "Finanzas", icon: "📈" },
-  { href: "/admin/ajustes", label: "Ajustes", short: "Ajustes", icon: "⚙️" },
+type Role = "admin" | "vendedor";
+// seller: lo puede abrir un vendedor
+const ALL_LINKS = [
+  { href: "/admin", label: "Resumen", short: "Resumen", icon: "📊", seller: false },
+  { href: "/admin/pos", label: "Punto de venta", short: "Caja", icon: "🧾", seller: true },
+  { href: "/admin/pedidos", label: "Pedidos", short: "Pedidos", icon: "🛵", seller: true },
+  { href: "/admin/productos", label: "Menú", short: "Menú", icon: "☕", seller: false },
+  { href: "/admin/caja", label: "Corte de caja", short: "Corte", icon: "💰", seller: true },
+  { href: "/admin/inventario", label: "Inventario", short: "Inventario", icon: "📦", seller: true },
+  { href: "/admin/gastos", label: "Gastos", short: "Gastos", icon: "💸", seller: false },
+  { href: "/admin/finanzas", label: "Finanzas", short: "Finanzas", icon: "📈", seller: false },
+  { href: "/admin/usuarios", label: "Usuarios", short: "Usuarios", icon: "👥", seller: false },
+  { href: "/admin/ajustes", label: "Ajustes", short: "Ajustes", icon: "⚙️", seller: false },
 ];
+const linksFor = (role: Role) => ALL_LINKS.filter((l) => role === "admin" || l.seller);
 const PRIMARY = 4; // en celular: los primeros 4 van en la barra inferior, el resto en "Más"
 
 function isActive(path: string, href: string) {
@@ -31,8 +35,9 @@ function Badge({ n }: { n: number }) {
 }
 
 /** Barra lateral (escritorio). */
-export default function AdminNav({ activeOrders = 0 }: { activeOrders?: number }) {
+export default function AdminNav({ activeOrders = 0, role = "admin" }: { activeOrders?: number; role?: Role }) {
   const path = usePathname();
+  const LINKS = linksFor(role);
   return (
     <nav className="flex flex-col gap-1 px-2 pb-4">
       {LINKS.map((l) => (
@@ -55,8 +60,9 @@ export default function AdminNav({ activeOrders = 0 }: { activeOrders?: number }
 }
 
 /** Barra inferior tipo app (celular). */
-export function MobileTabBar({ activeOrders = 0, logout }: { activeOrders?: number; logout: () => Promise<void> }) {
+export function MobileTabBar({ activeOrders = 0, logout, role = "admin" }: { activeOrders?: number; logout: () => Promise<void>; role?: Role }) {
   const path = usePathname();
+  const LINKS = linksFor(role);
   const [more, setMore] = useState(false);
   const extra = LINKS.slice(PRIMARY);
   const extraActive = extra.some((l) => isActive(path, l.href));

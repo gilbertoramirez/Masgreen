@@ -10,7 +10,7 @@ import BarcodeScanner from "./BarcodeScanner";
 type Target = { item: string; label: string; group: string };
 
 /** Inventario con la cámara: escanea un código y resurte, o asígnalo a un producto/insumo. */
-export default function InventoryScanner({ targets, categories = [] }: { targets: Target[]; categories?: string[] }) {
+export default function InventoryScanner({ targets, categories = [], canManage = true }: { targets: Target[]; categories?: string[]; canManage?: boolean }) {
   const router = useRouter();
   const [scanning, setScanning] = useState(false);
   const [code, setCode] = useState("");
@@ -161,7 +161,18 @@ export default function InventoryScanner({ targets, categories = [] }: { targets
         </form>
       )}
 
-      {notFound && (
+      {notFound && !canManage && (
+        <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm">
+          <p>
+            El código <b>{code}</b> todavía no está registrado. Pide al administrador que lo dé de alta.
+          </p>
+          <button className="btn-secondary" onClick={reset}>
+            Entendido
+          </button>
+        </div>
+      )}
+
+      {notFound && canManage && (
         <div className="space-y-3 rounded-xl bg-amber-50 p-3 text-sm">
           <p>
             El código <b>{code}</b> todavía no está registrado.

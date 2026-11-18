@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import Link from "next/link";
 import { Field, PageTitle } from "@/components/admin/ui";
 import { all, get } from "@/lib/db";
@@ -9,6 +10,7 @@ import BarcodeField from "@/components/admin/BarcodeField";
 import { blobEnabled } from "@/lib/images";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
+  await requireAdmin();
   const sp = await searchParams;
   const products = await all<Product>("SELECT * FROM products ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name");
   const editing = sp.id ? await get<Product>("SELECT * FROM products WHERE id = ?", [Number(sp.id)]) : undefined;

@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import { Bars, PageTitle, PeriodTabs, Stat } from "@/components/admin/ui";
 import { dailySales, financeSummary, rangeFor, salesByChannel, topProducts } from "@/lib/finance";
 import { money } from "@/lib/format";
@@ -6,6 +7,7 @@ import { EXPENSE_CATEGORIES, PAYMENT_LABEL, type PaymentMethod } from "@/lib/typ
 const CHANNEL: Record<string, string> = { mostrador: "Mostrador", web: "Pedido en línea", whatsapp: "WhatsApp" };
 
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ periodo?: string }> }) {
+  await requireAdmin();
   const periodo = (await searchParams).periodo ?? "mes";
   const range = rangeFor(periodo);
   const [fin, channels, top, daily] = await Promise.all([

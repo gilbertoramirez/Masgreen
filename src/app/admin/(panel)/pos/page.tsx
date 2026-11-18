@@ -1,3 +1,4 @@
+import { getSession } from "@/lib/auth";
 import Link from "next/link";
 import { all } from "@/lib/db";
 import { currentSession } from "@/lib/cash";
@@ -5,6 +6,7 @@ import { productLabel, type Product } from "@/lib/types";
 import PosTerminal from "@/components/admin/PosTerminal";
 
 export default async function PosPage() {
+  const admin = (await getSession())?.role === "admin";
   const [products, cash] = await Promise.all([
     all<Product>(
       "SELECT * FROM products WHERE active = 1 ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name",
@@ -23,6 +25,7 @@ export default async function PosPage() {
         </Link>
       )}
       <PosTerminal
+        canManage={admin}
         products={products.map((p) => ({
           id: p.id,
           name: productLabel(p),

@@ -35,6 +35,7 @@ export type OrderStatus = "pago_pendiente" | "nuevo" | "preparando" | "listo" | 
 export type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "stripe" | "whatsapp";
 
 export type Order = {
+  seller: string;
   id: number;
   token: string;
   channel: "mostrador" | "web" | "whatsapp";

@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import { Field, PageTitle } from "@/components/admin/ui";
 import { centsToInput } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -7,6 +8,7 @@ import NtfyTestButton from "@/components/admin/NtfyTestButton";
 import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
 export default async function SettingsPage() {
+  await requireAdmin();
   const s = await getSettings();
   return (
     <div className="max-w-2xl space-y-6">

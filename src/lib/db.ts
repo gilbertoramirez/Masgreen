@@ -231,6 +231,18 @@ CREATE TABLE IF NOT EXISTS drivers (
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
 );
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS driver_id INTEGER;
+CREATE TABLE IF NOT EXISTS staff (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'vendedor',
+  pin_hash TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  session_version INTEGER NOT NULL DEFAULT 1,
+  failed_attempts INTEGER NOT NULL DEFAULT 0,
+  locked_until TEXT,
+  created_at TEXT NOT NULL DEFAULT ''
+);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS seller TEXT NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_for TEXT;
 CREATE TABLE IF NOT EXISTS cash_sessions (
   id SERIAL PRIMARY KEY,
@@ -365,6 +377,18 @@ async function init(b: Backend) {
         "INSERT INTO settings (key, value) VALUES ('menu_version', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
         [MENU_VERSION],
       );
+    }
+    // Una sola vez: usuarios iniciales (sin PIN; el administrador les pone uno en Usuarios)
+    const [staffMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'staff_seed_v1'");
+    if (!staffMig) {
+      for (const [name, role] of [
+        ["Maricela Ramírez", "admin"],
+        ["Karla", "vendedor"],
+        ["Chris", "vendedor"],
+        ["Esaú", "vendedor"],
+      ])
+        await q("INSERT INTO staff (name, role, created_at) VALUES (?, ?, ?)", [name, role, new Date().toISOString()]);
+      await q("INSERT INTO settings (key, value) VALUES ('staff_seed_v1', '1') ON CONFLICT (key) DO NOTHING");
     }
     // Una sola vez: productos que quedaron "solo domingo" por un error al editar (el café cierra en domingo)
     const [daysMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'days_fix_v1'");

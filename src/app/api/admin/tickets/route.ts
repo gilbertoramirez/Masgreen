@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdmin } from "@/lib/auth";
+import { isStaff } from "@/lib/auth";
 import { all } from "@/lib/db";
 import { ticketsFor } from "@/lib/tickets-server";
 import type { Order } from "@/lib/types";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  *  ?after=15     → pedidos en línea confirmados después de la marca 15 (comandas automáticas)
  */
 export async function GET(req: Request) {
-  if (!(await isAdmin())) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!(await isStaff())) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const url = new URL(req.url);
   const ids = (url.searchParams.get("ids") ?? "")
     .split(",")

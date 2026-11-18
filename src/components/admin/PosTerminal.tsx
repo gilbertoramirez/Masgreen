@@ -42,7 +42,7 @@ const newTab = (n: number): OpenTab => ({
 const isEmpty = (t: OpenTab) => Object.keys(t.ticket).length === 0 && !t.customer && !t.phone;
 const tabLabel = (t: OpenTab) => t.customer.trim() || `Pedido ${t.n}`;
 
-export default function PosTerminal({ products }: { products: P[] }) {
+export default function PosTerminal({ products, canManage = true }: { products: P[]; canManage?: boolean }) {
   // Pedidos abiertos en pestañas: cada uno conserva sus productos y datos
   const [tabs, setTabs] = useState<OpenTab[]>(() => [newTab(1)]);
   const [activeId, setActiveId] = useState(tabs[0].id);
@@ -198,7 +198,9 @@ export default function PosTerminal({ products }: { products: P[] }) {
       setScanNote({ ok: false, text: `Buscando ${code}…` });
       lookupBarcode(code)
         .then((m) => {
-          if (m?.type === "supply") {
+          if (m?.type === "supply" && !canManage) {
+            setScanNote({ ok: false, text: `${m.name} es un insumo, no un producto de venta. Pide al administrador que lo pase al menú.` });
+          } else if (m?.type === "supply") {
             setScanNote(null);
             setConvPrice("");
             setConvCat(products[0]?.category ?? "");

@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { ticketsByIds } from "@/lib/tickets-server";
 import { SAMPLE_TICKET } from "@/lib/printer";
 import AutoPrint from "./AutoPrint";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** Ticket listo para imprimir con el diálogo del navegador (rollo de 58 u 80 mm). */
 export default async function TicketPage({ searchParams }: PageProps<"/admin/ticket">) {
-  await requireAdmin();
+  await requireStaff();
   const sp = await searchParams;
   const width = sp.w === "58" ? 58 : 80;
   const ids = String(sp.ids ?? "")

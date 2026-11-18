@@ -90,7 +90,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <p className="text-xs text-cafe-600">
                     {dateTime(o.created_at)} ·{" "}
                     {o.channel === "mostrador"
-                      ? "🧾 Venta en caja"
+                      ? `🧾 Venta en caja${o.seller ? ` · vendió ${o.seller}` : ""}`
                       : `${o.channel === "whatsapp" ? "WhatsApp" : "Web"} · ${o.delivery_type === "domicilio" ? "🛵 Domicilio" : "🏪 Recoger"}`}
                   </p>
                   {o.scheduled_for && (

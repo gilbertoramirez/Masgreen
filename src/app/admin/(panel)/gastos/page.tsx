@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import { Field, PageTitle, PeriodTabs } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { rangeFor } from "@/lib/finance";
@@ -9,6 +10,7 @@ import { deleteExpense, payExpense, saveExpense } from "../../actions";
 const RECURRING: Record<string, string> = { none: "", monthly: "Mensual", weekly: "Semanal" };
 
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ periodo?: string }> }) {
+  await requireAdmin();
   const periodo = (await searchParams).periodo ?? "mes";
   const range = rangeFor(periodo);
   const today = localDate();

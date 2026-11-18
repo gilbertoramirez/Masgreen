@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { get, isEphemeralDb } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { logout } from "../actions";
@@ -8,7 +8,7 @@ import LiveUpdates from "@/components/LiveUpdates";
 export const dynamic = "force-dynamic";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin();
+  const session = await requireStaff();
   const [settings, active] = await Promise.all([
     getSettings(),
     get<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status NOT IN ('entregado','cancelado','pago_pendiente') AND channel <> 'mostrador'"),
@@ -20,17 +20,20 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       <aside className="hidden bg-cafe-900 text-cafe-100 md:block md:w-56 md:shrink-0 print:hidden">
         <div className="p-4">
           <p className="font-semibold text-white">{settings.business_name}</p>
-          <p className="text-xs text-cafe-300">Panel de administración</p>
+          <p className="text-xs text-cafe-300">
+            {session.name} · {session.role === "admin" ? "Administrador" : "Vendedor"}
+          </p>
           <form action={logout} className="mt-3">
             <button className="text-xs text-cafe-300 underline">Cerrar sesión</button>
           </form>
         </div>
-        <AdminNav activeOrders={activeOrders} />
+        <AdminNav activeOrders={activeOrders} role={session.role} />
       </aside>
 
       {/* Celular: encabezado compacto */}
       <header className="sticky top-0 z-30 flex items-center justify-between bg-cafe-900 px-4 py-2.5 text-white md:hidden print:hidden">
         <p className="font-semibold">{settings.business_name}</p>
+        <p className="mr-24 truncate text-xs text-cafe-300">{session.name}</p>
 
       </header>
 
@@ -50,7 +53,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       </div>
 
       <div className="print:hidden">
-        <MobileTabBar activeOrders={activeOrders} logout={logout} />
+        <MobileTabBar activeOrders={activeOrders} logout={logout} role={session.role} />
       </div>
     </div>
   );

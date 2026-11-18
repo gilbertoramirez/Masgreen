@@ -6,8 +6,12 @@ import {
   checkPassword,
   endSession,
   passwordConfigured,
+  hashPin,
   requireAdmin,
+  requireStaff,
+  staffLogin,
   startSession,
+  validPin,
 } from "@/lib/auth";
 import { get, run, transaction } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
@@ -54,6 +58,13 @@ export async function login(
   _prev: string | null,
   formData: FormData,
 ): Promise<string | null> {
+  const staffId = int(formData, "staff_id");
+  if (staffId) {
+    const u = await staffLogin(staffId, str(formData, "pin"));
+    if (typeof u === "string") return u;
+    await startSession(u.id, u.session_version);
+    redirect(u.role === "admin" ? "/admin" : "/admin/pos");
+  }
   if (!passwordConfigured()) {
     return "Falta configurar ADMIN_PASSWORD en las variables de entorno de este despliegue (y volver a desplegar).";
   }
@@ -88,7 +99,7 @@ export async function posSale(input: {
     }
   | { ok: false; error: string }
 > {
-  await requireAdmin();
+  const session = await requireStaff();
   const pm: PaymentMethod = ["efectivo", "tarjeta", "transferencia"].includes(
     input.paymentMethod,
   )
@@ -108,6 +119,8 @@ export async function posSale(input: {
       cashGiven: pm === "efectivo" ? input.cashGiven : null,
       cashMustCover: true,
     });
+    // Quién hizo la venta (para el corte y los pedidos)
+    await run("UPDATE orders SET seller = ? WHERE id = ?", [session.name, order.id]);
     done();
     // El ticket va en la respuesta para imprimir y abrir el cajón de inmediato (sin otra consulta)
     const [ticket] = await ticketsByIds([order.id]);
@@ -130,7 +143,7 @@ export async function posSale(input: {
 // ---------- Pedidos ----------
 
 export async function updateOrderStatus(orderId: number, status: OrderStatus) {
-  await requireAdmin();
+  await requireStaff();
   if (!(status in ORDER_STATUS_LABEL)) return;
   await setOrderStatus(orderId, status);
   done();
@@ -141,7 +154,7 @@ export async function cancelOrder(
   orderId: number,
   reason: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requireStaff();
   if (!reason.trim())
     return { ok: false, error: "Escribe el motivo de la cancelación." };
   try {
@@ -170,7 +183,7 @@ export async function deleteOrder(
 }
 
 export async function markPaid(orderId: number) {
-  await requireAdmin();
+  await requireStaff();
   await markOrderPaid(orderId);
   done();
 }
@@ -282,7 +295,7 @@ async function addExpense(e: {
 
 /** Entrada de mercancía. Opcionalmente registra el gasto y actualiza el costo unitario. */
 export async function restock(formData: FormData) {
-  await requireAdmin();
+  const session = await requireStaff();
   const { type, id } = parseItem(formData);
   const qty = num(formData, "qty");
   const totalCost = toCents(formData.get("total_cost"));
@@ -312,7 +325,8 @@ export async function restock(formData: FormData) {
         str(formData, "note"),
       ],
     );
-    if (totalCost > 0 && formData.get("update_cost")) {
+    // Solo un administrador cambia el costo por unidad
+    if (totalCost > 0 && formData.get("update_cost") && session.role === "admin") {
       const unit = Math.round(totalCost / qty);
       if (type === "product")
         await q("UPDATE products SET cost = ? WHERE id = ?", [unit, id]);
@@ -338,7 +352,7 @@ export async function restock(formData: FormData) {
 
 /** Ajuste manual (merma, conteo físico, consumo de insumos). */
 export async function adjustStock(formData: FormData) {
-  await requireAdmin();
+  await requireStaff();
   const { type, id } = parseItem(formData);
   const newQty = num(formData, "new_qty");
   if (!id || newQty < 0) return;
@@ -545,7 +559,7 @@ export async function saveSettings(formData: FormData) {
 
 /** Sellos de un cliente (para la caja). */
 export async function getLoyalty(phone: string): Promise<LoyaltyStatus | null> {
-  await requireAdmin();
+  await requireStaff();
   return loyaltyStatus(phone);
 }
 
@@ -618,7 +632,7 @@ function cashBack(params: Record<string, string>): never {
 }
 
 export async function openCash(formData: FormData) {
-  await requireAdmin();
+  await requireStaff();
   try {
     await openSession(toCents(formData.get("opening")), str(formData, "note"));
   } catch (e) {
@@ -629,7 +643,7 @@ export async function openCash(formData: FormData) {
 }
 
 export async function cashMovement(formData: FormData) {
-  await requireAdmin();
+  await requireStaff();
   const kind = str(formData, "kind") === "entrada" ? "entrada" : "salida";
   try {
     await addMovement(kind, toCents(formData.get("amount")), str(formData, "reason"));
@@ -641,7 +655,7 @@ export async function cashMovement(formData: FormData) {
 }
 
 export async function closeCash(formData: FormData) {
-  await requireAdmin();
+  await requireStaff();
   if (str(formData, "counted") === "") cashBack({ error: "Escribe cuánto efectivo contaste en el cajón." });
   let id: number;
   try {
@@ -669,7 +683,7 @@ export async function removeCategoryPhoto(category: string) {
 // ---------- Códigos de barras (inventario) ----------
 
 export async function lookupBarcode(code: string): Promise<BarcodeMatch | null> {
-  await requireAdmin();
+  await requireStaff();
   return findByBarcode(String(code));
 }
 
@@ -821,4 +835,46 @@ export async function createProductFromBarcode(input: {
   });
   done();
   return findByBarcode(String(input.code));
+}
+
+
+// ---------- Usuarios (solo administradores) ----------
+
+export async function saveStaff(formData: FormData) {
+  await requireAdmin();
+  const id = int(formData, "id");
+  const name = str(formData, "name").slice(0, 60);
+  const role = str(formData, "role") === "admin" ? "admin" : "vendedor";
+  const active = formData.get("active") ? 1 : 0;
+  const pin = str(formData, "pin");
+  if (!name) redirect("/admin/usuarios?error=nombre");
+  if (pin && !validPin(pin)) redirect("/admin/usuarios?error=pin");
+  if (id) {
+    await run("UPDATE staff SET name = ?, role = ?, active = ?, session_version = session_version + CASE WHEN active <> ? OR role <> ? THEN 1 ELSE 0 END WHERE id = ?", [
+      name,
+      role,
+      active,
+      active,
+      role,
+      id,
+    ]);
+    // Cambiar el PIN cierra las sesiones abiertas de ese usuario
+    if (pin)
+      await run("UPDATE staff SET pin_hash = ?, failed_attempts = 0, locked_until = NULL, session_version = session_version + 1 WHERE id = ?", [hashPin(pin), id]);
+  } else {
+    await run("INSERT INTO staff (name, role, active, pin_hash, created_at) VALUES (?,?,?,?,?)", [
+      name,
+      role,
+      1,
+      pin ? hashPin(pin) : "",
+      new Date().toISOString(),
+    ]);
+  }
+  redirect(`/admin/usuarios?ok=${Date.now()}`);
+}
+
+export async function deleteStaff(id: number) {
+  await requireAdmin();
+  await run("DELETE FROM staff WHERE id = ?", [id]);
+  redirect(`/admin/usuarios?ok=${Date.now()}`);
 }

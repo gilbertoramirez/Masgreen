@@ -1,3 +1,4 @@
+import { getSession } from "@/lib/auth";
 import { Field, PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
@@ -39,6 +40,7 @@ const REASON: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
+  const admin = (await getSession())?.role === "admin";
   const [products, supplies, movements, targets] = await Promise.all([
     all<Product>("SELECT * FROM products WHERE active = 1 ORDER BY track_stock DESC, name, size"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
@@ -70,7 +72,7 @@ export default async function InventoryPage() {
         Valor estimado del inventario: <strong>{money(inventoryValue)}</strong>
       </p>
 
-      <InventoryScanner targets={targets} categories={categories} />
+      <InventoryScanner targets={targets} categories={categories} canManage={admin} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <form action={restock} className="card space-y-3">
@@ -121,6 +123,8 @@ export default async function InventoryPage() {
         </form>
       </div>
 
+      {admin ? (
+        <>
       <section className="card space-y-3">
         <div>
           <h2 className="font-semibold">Productos del menú</h2>
@@ -281,6 +285,39 @@ export default async function InventoryPage() {
           <button className="btn-primary">Agregar</button>
         </form>
       </section>
+        </>
+      ) : (
+        <section className="card overflow-x-auto">
+          <h2 className="mb-2 font-semibold">Existencias</h2>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Artículo</th>
+                <th className="text-right">Hay</th>
+                <th className="text-right">Mínimo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tracked.map((p) => (
+                <tr key={`p${p.id}`}>
+                  <td>{productLabel(p)}</td>
+                  <td className={`text-right tabular-nums ${p.stock <= p.min_stock ? "font-semibold text-red-700" : ""}`}>{p.stock}</td>
+                  <td className="text-right tabular-nums">{p.min_stock}</td>
+                </tr>
+              ))}
+              {supplies.map((s) => (
+                <tr key={`s${s.id}`}>
+                  <td>{s.name}</td>
+                  <td className={`text-right tabular-nums ${s.qty <= s.min_qty ? "font-semibold text-red-700" : ""}`}>
+                    {s.qty} {s.unit}
+                  </td>
+                  <td className="text-right tabular-nums">{s.min_qty}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="card overflow-x-auto">
         <h2 className="mb-2 font-semibold">Últimos movimientos</h2>

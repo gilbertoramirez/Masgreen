@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import Link from "next/link";
 import { all } from "@/lib/db";
 import { financeSummary, pendingExpenses, rangeFor, salesSummary } from "@/lib/finance";
@@ -8,6 +9,7 @@ import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL, productLabel } from "@/lib/type
 import { PageTitle, Stat } from "@/components/admin/ui";
 
 export default async function Dashboard() {
+  await requireAdmin();
   const today = rangeFor("hoy");
   const month = rangeFor("mes");
   const [todaySales, monthFin, pending, lowProducts, lowSupplies, activeOrders] = await Promise.all([
