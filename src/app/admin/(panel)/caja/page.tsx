@@ -1,4 +1,5 @@
 import { requireStaff } from "@/lib/auth";
+import CashCounter from "@/components/admin/CashCounter";
 import Link from "next/link";
 import { Field, PageTitle } from "@/components/admin/ui";
 import PrintPageButton from "@/components/admin/PrintPageButton";
@@ -199,12 +200,10 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
                   Cuenta todo el efectivo del cajón. Debe haber <b>{money(summary.expected)}</b>.
                 </>
               ) : (
-                "Cuenta todo el efectivo del cajón (billetes y monedas) y escribe el total."
+                "Cuenta el efectivo del cajón: escribe cuántos billetes y monedas hay de cada uno y se suma solo."
               )}
             </p>
-            <Field label="Efectivo contado ($)">
-              <input name="counted" type="number" step="0.5" min="0" className="input text-lg" required />
-            </Field>
+            <CashCounter expected={admin ? summary.expected : undefined} />
             <Field label="Nota (opcional)">
               <input name="note" className="input" placeholder="Quién cierra, observaciones…" />
             </Field>

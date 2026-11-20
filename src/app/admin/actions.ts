@@ -661,7 +661,11 @@ export async function closeCash(formData: FormData) {
   let id: number;
   try {
     const note = str(formData, "note");
-    id = await closeSession(toCents(formData.get("counted")), `Cerró ${session.name}${note ? `: ${note}` : ""}`);
+    const breakdown = str(formData, "breakdown").slice(0, 300);
+    id = await closeSession(
+      toCents(formData.get("counted")),
+      `Cerró ${session.name}${note ? `: ${note}` : ""}${breakdown ? ` · Desglose: ${breakdown}` : ""}`,
+    );
   } catch (e) {
     if (e instanceof CashError) cashBack({ error: e.message });
     throw e;

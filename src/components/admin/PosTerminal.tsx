@@ -112,7 +112,6 @@ export default function PosTerminal({ products, canManage = true }: { products: 
     }
   }
 
-  const [category, setCategory] = useState("Todo");
   const [search, setSearch] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -154,7 +153,6 @@ export default function PosTerminal({ products, canManage = true }: { products: 
     }
   }
   const [pending, start] = useTransition();
-  const [sheet, setSheet] = useState(false); // ticket abierto en celular
 
   const categories = useMemo(() => ["Todo", ...new Set(products.map((p) => p.category))], [products]);
   // Al buscar se busca en todo el menú (tolera acentos y errores de dedo)
@@ -166,7 +164,7 @@ export default function PosTerminal({ products, canManage = true }: { products: 
         { text: p.name, weight: 1 },
         { text: p.category, weight: 0.6 },
       ])
-    : products.filter((p) => category === "Todo" || p.category === category);
+    : []; // sin búsqueda no se lista el menú: se agrega escaneando o buscando
   const lines = Object.entries(ticket)
     .map(([id, qty]) => ({ p: products.find((x) => x.id === Number(id))!, qty }))
     .filter((l) => l.p && l.qty > 0);
@@ -271,7 +269,6 @@ export default function PosTerminal({ products, canManage = true }: { products: 
         }
         setClosed(result);
         finishTab(chargedId);
-        setSheet(false);
       } else {
         setMsg({ ok: false, text: res.error });
       }
@@ -284,7 +281,7 @@ export default function PosTerminal({ products, canManage = true }: { products: 
     <>
         <h2 className="text-lg font-semibold">{tabLabel(cur)}</h2>
         {lines.length === 0 ? (
-          <p className="text-sm text-cafe-600">Toca un producto para agregarlo.</p>
+          <p className="text-sm text-cafe-600">Escanea el código o busca un producto para agregarlo.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {lines.map((l) => (
@@ -404,7 +401,7 @@ export default function PosTerminal({ products, canManage = true }: { products: 
   );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+    <div className="mx-auto max-w-2xl space-y-3">
       <section className="min-w-0">
         {/* Pedidos abiertos */}
         <div className="sticky top-11 z-20 -mx-4 mb-3 flex gap-2 overflow-x-auto bg-cafe-50/95 px-4 py-2 backdrop-blur md:top-0 lg:static lg:mx-0 lg:bg-transparent lg:px-0 lg:py-0 lg:pb-1" role="tablist" aria-label="Pedidos abiertos">
@@ -513,81 +510,40 @@ export default function PosTerminal({ products, canManage = true }: { products: 
             onClose={() => setScanning(false)}
           />
         )}
-        <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm ${
-                category === c ? "bg-cafe-800 text-white" : "bg-white ring-1 ring-cafe-200"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-          {shown.map((p) => {
-            const out = p.maxQty <= 0;
-            const q = ticket[p.id] ?? 0;
-            return (
-              <button
-                key={p.id}
-                disabled={out || q >= p.maxQty}
-                onClick={() => add(p, 1)}
-                className="card relative p-3 text-left transition hover:border-cafe-300 active:scale-[0.97] disabled:opacity-40 lg:p-4"
-              >
-                {p.icon && (
-                  <span className="mb-1 block text-2xl" aria-hidden>
-                    {p.icon}
+        {search.trim() !== "" && (
+          <div className="card divide-y divide-cafe-100 p-0">
+            {shown.length === 0 && <p className="p-3 text-sm text-cafe-600">Sin resultados.</p>}
+            {shown.slice(0, 8).map((p) => {
+              const out = p.maxQty <= 0;
+              const q = ticket[p.id] ?? 0;
+              return (
+                <button
+                  key={p.id}
+                  disabled={out || q >= p.maxQty}
+                  onClick={() => {
+                    add(p, 1);
+                    setSearch("");
+                  }}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-cafe-50 disabled:opacity-40"
+                >
+                  {p.icon && <span aria-hidden>{p.icon}</span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{p.name}</span>
+                    {p.maxQty < 999 && <span className="text-xs text-cafe-500">{out ? "Agotado" : `Quedan ${p.maxQty}`}</span>}
                   </span>
-                )}
-                <p className="pr-5 text-sm leading-snug font-medium lg:text-base">{p.name}</p>
-                <p className="text-sm text-cafe-700">{money(p.price)}</p>
-                {p.maxQty < 999 && <p className="text-xs text-cafe-500">{out ? "Agotado" : `Quedan ${p.maxQty}`}</p>}
-                {q > 0 && (
-                  <span className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-cafe-800 text-xs font-bold text-white">
-                    {q}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                  <span className="tabular-nums text-cafe-700">{money(p.price)}</span>
+                  <span className="rounded-full bg-cafe-800 px-2 text-sm font-bold text-white">+</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
 
-      {/* Escritorio: ticket a la derecha */}
-      <aside className="card hidden h-fit space-y-3 lg:sticky lg:top-4 lg:block">{ticketPanel}</aside>
+      {/* El pedido en curso, siempre a la vista */}
+      <section className="card space-y-3">{ticketPanel}</section>
 
-      {/* Celular: barra con total arriba de la navegación */}
-      {lines.length > 0 && !sheet && (
-        <button
-          onClick={() => setSheet(true)}
-          className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-between rounded-xl bg-cafe-800 px-4 py-3 text-white shadow-lg lg:hidden"
-        >
-          <span className="text-sm">
-            🧾 {tabLabel(cur)} · {lines.reduce((a, l) => a + l.qty, 0)} prod. · <span className="underline">ver ticket</span>
-          </span>
-          <span className="text-lg font-semibold tabular-nums">Cobrar {money(total)}</span>
-        </button>
-      )}
       {closed && <SaleClosedDialog sale={closed} onClose={() => setClosed(null)} />}
-      {sheet && (
-        <div className="fixed inset-0 z-[60] bg-black/40 lg:hidden" onClick={() => setSheet(false)}>
-          <div
-            className="absolute inset-x-0 bottom-0 max-h-[90dvh] space-y-3 overflow-y-auto rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <div className="mx-auto h-1 w-10 rounded-full bg-cafe-200" />
-            </div>
-            {ticketPanel}
-            <button className="btn-secondary w-full" onClick={() => setSheet(false)}>
-              Seguir agregando
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
